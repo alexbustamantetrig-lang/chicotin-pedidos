@@ -19,8 +19,12 @@ create table if not exists public.pedidos (
   items       jsonb not null check (jsonb_typeof(items) = 'array' and jsonb_array_length(items) between 1 and 60),
   total       numeric(8,2) not null check (total >= 0 and total < 1000),
   pago        text not null check (pago in ('Efectivo','Tarjeta','Bizum')),
-  notas       text check (char_length(notas) <= 500)
+  notas       text check (char_length(notas) <= 500),
+  repartidor  text check (char_length(repartidor) <= 40)
 );
+-- (si la tabla ya existía de antes)
+alter table public.pedidos add column if not exists repartidor text check (char_length(repartidor) <= 40);
+create index if not exists pedidos_created_at on public.pedidos (created_at desc);
 
 -- Quién es personal del restaurante (puede ver y mover pedidos en el panel).
 create table if not exists public.personal (

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="panel.css">
+  <link rel="stylesheet" href="panel.css?v=2">
 </head>
 <body>
   <header class="bar">
@@ -19,12 +19,20 @@
       <div><b>Panel de pedidos</b><small id="fecha"></small></div>
     </div>
     <div class="bar__r">
-      <span class="mode-tag" id="mode-tag" hidden>Modo demo · pedidos guardados en este navegador</span>
+      <span class="mode-tag" id="mode-tag" hidden>Modo demo · datos solo en este navegador</span>
       <button class="tbtn" id="demo-order" hidden>+ Pedido de prueba</button>
+      <button class="tbtn" id="demo-month" hidden>+ 30 días de prueba</button>
       <button class="tbtn" id="sound" aria-pressed="false">🔕 Activar sonido</button>
       <button class="tbtn" id="logout" hidden>Salir</button>
     </div>
   </header>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Secciones del panel" hidden>
+    <button role="tab" data-tab="actuales" aria-selected="true"><span class="tabs__ic">🧾</span>Pedidos actuales <b class="badge" data-count="actuales"></b></button>
+    <button role="tab" data-tab="cocina" aria-selected="false"><span class="tabs__ic">🍳</span>En cocina <b class="badge" data-count="cocina"></b></button>
+    <button role="tab" data-tab="reparto" aria-selected="false"><span class="tabs__ic">🛵</span>En reparto <b class="badge" data-count="reparto"></b></button>
+    <button role="tab" data-tab="caja" aria-selected="false"><span class="tabs__ic">💶</span>Caja</button>
+  </nav>
 
   <section class="login" id="login" hidden>
     <form class="login__card" id="login-form">
@@ -38,18 +46,16 @@
     </form>
   </section>
 
-  <main class="board" id="board" hidden>
-    <section class="col" data-col="nuevo"><h2>Nuevos <span class="count"></span></h2><div class="list"></div></section>
-    <section class="col" data-col="cocina"><h2>En cocina <span class="count"></span></h2><div class="list"></div></section>
-    <section class="col" data-col="salida"><h2>Reparto · Recoger <span class="count"></span></h2><div class="list"></div></section>
-    <section class="col col--done" data-col="entregado"><h2>Entregados hoy <span class="count"></span></h2><div class="list"></div></section>
-  </main>
+  <main class="view" id="view" hidden></main>
+
+  <!-- Barra de acciones para los pedidos seleccionados -->
+  <div class="actionbar" id="actionbar" hidden></div>
 
   <div class="flash" id="flash" role="status" aria-live="assertive"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="carta.js"></script>
   <script src="db.js"></script>
-  <script src="panel.js"></script>
+  <script src="panel.js?v=2"></script>
 </body>
 </html>

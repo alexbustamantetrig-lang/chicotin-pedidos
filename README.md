@@ -26,7 +26,7 @@ Para la demo con el dueño, pon tu móvil (`"34600123456"`) y verás cómo llega
    - Añade el enlace en el perfil de Google (enlace de pedido) y en la bio de Instagram.
 
 ## Panel de cocina y seguimiento
-- `panel.html`: tablero para la tablet del restaurante (Nuevos → En cocina → Reparto/Recoger → Entregados),
+- `panel.html`: app del restaurante con pestañas: Pedidos actuales → En cocina (elegir repartidor, varios a la vez) → En reparto (ruta por repartidor, "ha vuelto") → Caja (facturado hoy, efectivo por repartidor, medias y saldo de los últimos 30 días),
   con aviso sonoro de pedido nuevo y botón 💬 para avisar al cliente por WhatsApp con un toque.
 - `seguimiento.html?id=…`: el cliente ve en directo en qué paso va su pedido. El enlace sale en el WhatsApp
   del pedido y en la pantalla final.

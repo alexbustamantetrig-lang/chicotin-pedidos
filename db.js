@@ -26,13 +26,16 @@ window.SUPABASE_ANON_KEY = "";
       const o = read().find(x => x.id === id);
       return o ? Object.fromEntries(PUBLIC.map(k => [k, o[k]])) : null;
     },
-    async listOrders() {
-      const since = Date.now() - 18 * 3600e3;
+    async listOrders(hours = 18) {
+      const since = Date.now() - hours * 3600e3;
       return read().filter(o => new Date(o.created_at) > since).sort((a, b) => a.created_at < b.created_at ? 1 : -1);
     },
-    async updateStatus(id, status) {
-      write(read().map(o => o.id === id ? { ...o, status, updated_at: new Date().toISOString() } : o));
+    // patch: { status, repartidor, ... } aplicado a varios pedidos a la vez
+    async updateOrders(ids, patch) {
+      const now = new Date().toISOString();
+      write(read().map(o => ids.includes(o.id) ? { ...o, ...patch, updated_at: now } : o));
     },
+    async seed(list) { write([...read(), ...list]); },
     subscribe(cb) { addEventListener("storage", e => { if (e.key === LS) cb(); }); },
     async session() { return { local: true }; },
     async signIn() { return {}; },
@@ -52,14 +55,14 @@ window.SUPABASE_ANON_KEY = "";
         if (error) throw error;
         return data && data[0] || null;
       },
-      async listOrders() {
-        const since = new Date(Date.now() - 18 * 3600e3).toISOString();
+      async listOrders(hours = 18) {
+        const since = new Date(Date.now() - hours * 3600e3).toISOString();
         const { data, error } = await sb.from("pedidos").select("*").gte("created_at", since).order("created_at", { ascending: false });
         if (error) throw error;
         return data;
       },
-      async updateStatus(id, status) {
-        const { error } = await sb.from("pedidos").update({ status }).eq("id", id);
+      async updateOrders(ids, patch) {
+        const { error } = await sb.from("pedidos").update(patch).in("id", ids);
         if (error) throw error;
       },
       subscribe(cb) {
