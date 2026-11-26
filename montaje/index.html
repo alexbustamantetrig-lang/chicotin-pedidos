@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Montaje del botón · Chicotín</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; max-width: 620px; margin: 48px auto; padding: 0 20px; color: #1C1B18; background: #FAFAF6; }
+    h1 { font-family: Georgia, serif; font-weight: 500; }
+    .bm { display: inline-block; padding: 12px 20px; border-radius: 12px; background: #C0392B; color: #fff; font-weight: 600; text-decoration: none; cursor: grab; }
+    input { font: inherit; padding: 10px 12px; border: 1px solid #ddd; border-radius: 10px; width: 100%; box-sizing: border-box; }
+    ol li { margin-bottom: 8px; }
+    .note { color: #6E6A62; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Montaje del botón en chicotin.com</h1>
+  <p>Este marcador añade el botón <b>“Pedir online”</b> a su web <b>solo en tu navegador</b>, para enseñárselo al dueño. Su web real no cambia y al recargar desaparece.</p>
+  <label>Dirección de la página de pedidos:<br>
+    <input id="url" value="http://localhost:5483/"></label>
+  <p class="note">Cuando la subas a Vercel, cambia esto por tu enlace (por ejemplo https://chicotin-pedidos.vercel.app).</p>
+  <ol>
+    <li>Arrastra este botón a tu barra de marcadores: <a class="bm" id="bm" href="#">＋ Pedir online (demo)</a></li>
+    <li>Abre <a href="https://www.chicotin.com/" target="_blank" rel="noopener">chicotin.com</a>.</li>
+    <li>Pulsa el marcador. Aparecen los botones en la portada y en la cabecera.</li>
+  </ol>
+  <script>
+    fetch("boton.js").then(r => r.text()).then(code => {
+      const make = () => {
+        const u = document.getElementById("url").value.trim();
+        document.getElementById("bm").href = "javascript:" + encodeURIComponent(`window.__URL_PEDIDOS=${JSON.stringify(u)};` + code);
+      };
+      document.getElementById("url").addEventListener("input", make); make();
+    });
+  </script>
+</body>
+</html>
