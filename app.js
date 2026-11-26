@@ -20,6 +20,8 @@
   function isOpen(d = new Date()) {
     return (C.horario[d.getDay()] || []).some(([a, b]) => nowMin(d) >= toMin(a) && nowMin(d) < toMin(b));
   }
+  // Modo pruebas (carta.js → modoPruebas: true): deja pedir aunque esté cerrado.
+  const canOrder = () => C.modoPruebas || isOpen();
   function nextOpening(d = new Date()) {
     for (let i = 0; i < 8; i++) {
       const day = new Date(d); day.setDate(d.getDate() + i);
@@ -44,7 +46,7 @@
       $("b", el).textContent = `Abierto · hasta ${t[1]}`;
     } else {
       const n = nextOpening();
-      $("b", el).textContent = n ? `Cerrado · abre ${n.i === 0 ? "a las" : n.i === 1 ? "mañana" : DIAS[n.day.getDay()]} ${n.hora}` : "Cerrado";
+      $("b", el).textContent = (n ? `Cerrado · abre ${n.i === 0 ? "a las" : n.i === 1 ? "mañana" : DIAS[n.day.getDay()]} ${n.hora}` : "Cerrado") + (C.modoPruebas ? " · modo pruebas" : "");
     }
   }
 
@@ -264,7 +266,7 @@
   /* ── Checkout ────────────────────────────── */
   function openCheckout() {
     const f = state.form, dom = state.mode === "domicilio";
-    const open = isOpen();
+    const open = canOrder();
     const hasEncargo = state.cart.some(l => l.encargo);
     const minDate = new Date(); minDate.setDate(minDate.getDate() + 2);
     openSheet(`
@@ -310,7 +312,7 @@
         if (bad && ok) { inp.focus(); ok = false; }
       });
       if (!ok) return;
-      if (!isOpen()) { openCheckout(); return; }   // por si cerró mientras rellenaba
+      if (!canOrder()) { openCheckout(); return; }   // por si cerró mientras rellenaba
       const data = Object.fromEntries(new FormData(form));
       data.hora = "Lo antes posible";
       state.form = { nombre: data.nombre, telefono: data.telefono, direccion: data.direccion || state.form.direccion, pago: data.pago };
@@ -332,7 +334,7 @@
       if (!form.isConnected) return clearInterval(showFull.t);
       try {
         const w = await DB.waiting();
-        if (w.en_espera < w.limite && isOpen()) {
+        if (w.en_espera < w.limite && canOrder()) {
           clearInterval(showFull.t); e.remove();
           btn.disabled = false; btn.textContent = `Confirmar pedido · ${eur(subtotal() + envio())}`;
         }
