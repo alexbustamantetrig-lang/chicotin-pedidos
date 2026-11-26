@@ -183,6 +183,31 @@ em { font-style: italic; color: var(--red); }
 .opt span { flex: 1; }
 .opt small { color: var(--muted); font-size: 14px; }
 
+/* Quitar ingredientes */
+.qchips { display: flex; flex-wrap: wrap; gap: 8px; }
+.qchip { position: relative; cursor: pointer; }
+.qchip input { position: absolute; opacity: 0; pointer-events: none; }
+.qchip span {
+  display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 99px;
+  background: var(--paper); border: 1px solid var(--line); font-size: 14px; font-weight: 500;
+  transition: background .2s, border-color .2s, color .2s, transform .15s;
+}
+.qchip span::before { content: "✓"; font-size: 12px; color: var(--green); }
+.qchip:active span { transform: scale(.96); }
+.qchip input:checked + span { background: var(--red-soft); border-color: var(--red); color: var(--red); text-decoration: line-through; }
+.qchip input:checked + span::before { content: "✕"; color: var(--red); }
+.qchip input:focus-visible + span { outline: 2px solid var(--red); outline-offset: 2px; }
+
+/* Salsas en el carrito */
+.sauces { margin: 18px 0 4px; padding: 16px; border-radius: 16px; background: var(--paper); border: 1px solid var(--line); }
+.sauces h3 { margin: 0 0 8px; font: 500 24px/1.1 var(--serif); }
+.sauces h3 small { font: 500 13px var(--sans); color: var(--muted); margin-left: 6px; }
+.sauce { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.sauce:first-of-type { border-top: 0; }
+.sauce span { font-weight: 500; }
+.sauce.is-on span { color: var(--red); font-weight: 700; }
+.sauce .qty button:last-child { color: var(--red); }
+
 .qty { display: inline-flex; align-items: center; gap: 4px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
 .qty button { width: 34px; height: 34px; border-radius: 9px; font-size: 18px; font-weight: 600; }
 .qty button:hover { background: var(--bg); }
@@ -214,7 +239,7 @@ em { font-style: italic; color: var(--red); }
 .field.has-err input { border-color: var(--red); }
 .field.has-err .err { display: block; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.pay { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pay { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
 .pay .opt { flex-direction: column; gap: 4px; text-align: center; padding: 12px 6px; font-size: 14px; font-weight: 600; }
 .pay .opt input { position: absolute; opacity: 0; }
 .legal { color: var(--muted); font-size: 12px; text-align: center; margin: 12px 0 0; }
@@ -227,13 +252,6 @@ em { font-style: italic; color: var(--red); }
 .preview { text-align: left; white-space: pre-wrap; font: 13px/1.5 ui-monospace, Consolas, monospace; background: #E7F6DC; border-radius: 12px 12px 12px 2px; padding: 12px 14px; margin: 16px 0; max-height: 220px; overflow: auto; }
 
 .pay-hint { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
-.bizum { background: var(--paper); border: 2px solid #05C3DD; border-radius: 16px; padding: 16px; margin: 8px 0 4px; text-align: left; }
-.bizum .eyebrow { color: #0496A9; font-weight: 700; }
-.bizum__row { display: grid; grid-template-columns: 84px 1fr auto; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
-.bizum__row span { color: var(--muted); font-size: 14px; }
-.bizum__row b { font-size: 18px; }
-.bizum__copy { font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 8px; background: #E6F9FB; color: #0496A9; }
-.bizum__note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .track-cta {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0;
   padding: 16px 18px; border-radius: 16px; background: var(--ink); color: #fff; text-decoration: none;

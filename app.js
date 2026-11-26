@@ -111,9 +111,17 @@
   $("#carta").addEventListener("click", e => {
     const b = e.target.closest(".item"); if (!b) return;
     const p = itemById[b.dataset.id];
-    if (!p.variantes && !p.opciones && !p.extras) addToCart({ n: itemName(p), d: "", unit: p.p, qty: 1, encargo: p.encargo, src: b.dataset.id }, b);
+    if (!p.variantes && !p.opciones && !p.extras && !ingredientes(p).length) addToCart({ n: itemName(p), d: "", unit: p.p, qty: 1, encargo: p.encargo, src: b.dataset.id }, b);
     else openOptions(b.dataset.id, b);
   });
+  // Ingredientes que se pueden quitar: los de la descripción menos el principal (la carne, el pollo…).
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  function ingredientes(p) {
+    if (p.quitar) return p.quitar;
+    if (!["Hamburguesas", "Bocadillos", "Sándwiches"].includes(p.cat)) return [];
+    if (!p.d || /^(2 pisos|Con una|Solo|La Chicotín)/.test(p.d)) return [];
+    return p.d.split(/,\s*|\s+y\s+/).map(s => s.trim()).filter(Boolean).slice(1);
+  }
   const itemName = p => (p.cat === "Hamburguesas" ? "Hamburguesa " : p.cat === "Bocadillos" ? "Bocadillo " : p.cat === "Sándwiches" ? "Sándwich " : "") + p.n;
 
   function refreshBadges() {
@@ -148,6 +156,7 @@
 
   function openOptions(id, srcEl) {
     const p = itemById[id];
+    const sinList = ingredientes(p);
     let qty = 1;
     const html = `
       <p class="eyebrow">${esc(p.cat)}</p>
@@ -157,6 +166,8 @@
         <label class="opt"><input type="radio" name="var" value="${i}" ${i === 0 ? "checked" : ""}><span>${v}</span><small>${eur(pr)}</small></label>`).join("")}</div>` : ""}
       ${p.opciones ? `<div class="opt-grp"><h3>${p.opciones.titulo}</h3>${p.opciones.valores.map((v, i) => `
         <label class="opt"><input type="radio" name="op" value="${esc(v)}" ${i === 0 ? "checked" : ""}><span>${esc(v)}</span></label>`).join("")}</div>` : ""}
+      ${sinList.length ? `<div class="opt-grp"><h3>Quitar ingredientes <small style="text-transform:none;letter-spacing:0;font-weight:400">· toca lo que no quieras</small></h3><div class="qchips">${sinList.map(v => `
+        <label class="qchip"><input type="checkbox" name="sin" value="${esc(v)}"><span>${esc(cap(v))}</span></label>`).join("")}</div></div>` : ""}
       ${p.extras ? `<div class="opt-grp"><h3>Extras</h3>${EXTRAS[p.extras].map(([v, pr]) => `
         <label class="opt"><input type="checkbox" name="ex" value="${esc(v)}" data-p="${pr}"><span>${esc(v)}</span><small>+${eur(pr)}</small></label>`).join("")}</div>` : ""}
       <div class="addrow">
@@ -177,8 +188,9 @@
       const bits = [];
       if (p.variantes) bits.push(p.variantes[+body.querySelector("[name=var]:checked").value][0]);
       if (p.opciones) bits.push(body.querySelector("[name=op]:checked").value);
+      const sin = [...body.querySelectorAll("[name=sin]:checked")].map(x => "Sin " + x.value);
       const ex = [...body.querySelectorAll("[name=ex]:checked")].map(x => "+ " + x.value);
-      addToCart({ n: itemName(p), d: [...bits, ...ex].join(" · "), unit: calc(), qty, encargo: p.encargo, src: id }, srcEl);
+      addToCart({ n: itemName(p), d: [...bits, ...sin, ...ex].join(" · "), unit: calc(), qty, encargo: p.encargo, src: id }, srcEl);
       closeSheet();
     };
     upd();
@@ -207,8 +219,20 @@
   }
   $("#cartbar").onclick = () => openCart();
 
+  // Salsas: se ofrecen al final, en el carrito, y se guardan como líneas normales del pedido.
+  const SX = window.SALSAS_EXTRA || { precio: 0, lista: [] };
+  const salsaLine = s => state.cart.find(l => l.salsa && l.n === "Salsa " + s);
+  function sauces() {
+    if (!SX.lista.length) return "";
+    return `<div class="sauces"><h3>¿Unas salsas? <small>${eur(SX.precio)} cada una</small></h3>
+      ${SX.lista.map(s => { const q = salsaLine(s)?.qty || 0; return `
+        <div class="sauce ${q ? "is-on" : ""}"><span>${esc(s)}</span>
+          <div class="qty">${q ? `<button data-salsa="${esc(s)}" data-q="-1" aria-label="Quitar ${esc(s)}">−</button><b>${q}</b>` : ""}<button data-salsa="${esc(s)}" data-q="1" aria-label="Añadir ${esc(s)}">+</button></div>
+        </div>`; }).join("")}
+    </div>`;
+  }
   function cartLines() {
-    return state.cart.map((l, i) => `
+    return state.cart.map((l, i) => l.salsa ? "" : `
       <div class="line">
         <div class="line__n">${esc(l.n)}</div>
         <div class="line__p">${eur(l.unit * l.qty)}</div>
@@ -222,19 +246,27 @@
       <p class="eyebrow">${state.mode === "domicilio" ? "A domicilio" : "Recoger en local"}</p>
       <h2>Tu pedido</h2>
       ${cartLines()}
+      ${sauces()}
+      ${min ? `<div class="warn">El pedido mínimo a domicilio es de ${eur(C.pedidoMinimoDomicilio)}. Te faltan ${eur(C.pedidoMinimoDomicilio - subtotal())}.</div>` : ""}
       <div class="sum">
         <div><span>Subtotal</span><span>${eur(subtotal())}</span></div>
         ${state.mode === "domicilio" ? `<div><span>Envío</span><span>${C.gastosEnvio ? eur(C.gastosEnvio) : "Gratis"}</span></div>` : ""}
         <div class="tot"><span>Total</span><span>${eur(subtotal() + envio())}</span></div>
       </div>
-      ${min ? `<div class="warn">El pedido mínimo a domicilio es de ${eur(C.pedidoMinimoDomicilio)}. Te faltan ${eur(C.pedidoMinimoDomicilio - subtotal())}.</div>` : ""}
       <div class="addrow"><button class="btn btn--ghost" id="seguir">Seguir pidiendo</button><button class="btn btn--red" id="checkout" ${min ? "disabled" : ""}>Continuar</button></div>
     `);
     $("#sheet-body").querySelectorAll("[data-i]").forEach(b => b.onclick = () => {
       const l = state.cart[+b.dataset.i]; l.qty += +b.dataset.q;
       if (l.qty <= 0) state.cart.splice(+b.dataset.i, 1);
+      if (!state.cart.some(x => !x.salsa)) state.cart = [];   // sin platos, las salsas solas no tienen sentido
       renderCartbar(); refreshBadges();
       state.cart.length ? openCartRefresh() : closeSheet();
+    });
+    $("#sheet-body").querySelectorAll("[data-salsa]").forEach(b => b.onclick = () => {
+      const s = b.dataset.salsa, l = salsaLine(s);
+      if (l) { l.qty += +b.dataset.q; if (l.qty <= 0) state.cart.splice(state.cart.indexOf(l), 1); }
+      else state.cart.push({ key: `Salsa ${s}|`, n: `Salsa ${s}`, d: "", unit: SX.precio, qty: 1, salsa: true });
+      renderCartbar(); openCartRefresh();
     });
     $("#seguir").onclick = closeSheet;
     $("#checkout").onclick = openCheckout;
@@ -262,7 +294,7 @@
         ${hasEncargo ? `<div class="field"><label for="f-enc">Fecha del encargo (tortilla / empanada)</label><input id="f-enc" name="encargo" type="date" min="${minDate.toISOString().slice(0, 10)}" required><span class="err">Elige un día con 2 días de antelación</span></div>` : ""}
         <div class="field"><label>Pago</label>
           <div class="pay">
-            ${[["Efectivo", "💶"], ["Tarjeta", "💳"], ["Bizum", "📱"]].map(([v, ic], i) => `<label class="opt"><input type="radio" name="pago" value="${v}" ${(f.pago || "Efectivo") === v ? "checked" : ""}><span>${ic}</span>${v}</label>`).join("")}
+            ${[["Efectivo", "💶"], ["Tarjeta", "💳"]].map(([v, ic]) => `<label class="opt"><input type="radio" name="pago" value="${v}" ${(f.pago === "Tarjeta" ? "Tarjeta" : "Efectivo") === v ? "checked" : ""}><span>${ic}</span>${v}</label>`).join("")}
           </div>
           <p class="pay-hint" id="pay-hint"></p></div>
         <div class="field"><label for="f-notas">Notas o alergias <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><textarea id="f-notas" name="notas" placeholder="Sin cebolla, timbre roto, alergia al gluten…"></textarea></div>
@@ -278,7 +310,6 @@
     const HINTS = {
       Efectivo: dom ? "Pagas al repartidor. Si necesitas cambio, dínoslo en las notas." : "Pagas al recoger en el local.",
       Tarjeta: dom ? "El repartidor lleva datáfono." : "Pagas con tarjeta al recoger.",
-      Bizum: `Al enviar el pedido te mostramos el número y el importe para hacer el Bizum. Lo preparamos en cuanto llegue.`,
     };
     const hint = () => { $("#pay-hint").textContent = HINTS[form.pago.value]; };
     form.addEventListener("change", e => { if (e.target.name === "pago") hint(); });
@@ -314,7 +345,7 @@
     L.push("");
     if (dom && C.gastosEnvio) L.push(`Envío: ${eur(C.gastosEnvio)}`);
     L.push(`*TOTAL: ${eur(subtotal() + envio())}*`);
-    L.push(d.pago === "Bizum" ? `*Pago:* Bizum (concepto "Pedido ${num}"). Preparar al recibirlo.` : `*Pago:* ${d.pago}${dom ? " al repartidor" : " al recoger"}`);
+    L.push(`*Pago:* ${d.pago}${dom ? " al repartidor" : " al recoger"}`);
     L.push("");
     L.push(`*Cliente:* ${d.nombre} · ${d.telefono}`);
     if (dom) L.push(`*Dirección:* ${d.direccion}`);
@@ -341,7 +372,6 @@
     });
     localStorage.setItem("chicotin-ultimo", JSON.stringify({ id, num, at: Date.now() }));
     const text = encodeURIComponent(msg), phone = C.whatsapp || "";
-    const bizumNum = (C.bizum || phone).replace(/^34/, "");
     // Móvil: wa.me abre la app directamente.
     // Ordenador: wa.me se queda en una página intermedia, así que vamos directos a WhatsApp Web
     // y ofrecemos también la app de escritorio y copiar el texto.
@@ -361,14 +391,6 @@
         <h2 style="margin-right:0">¡Listo, ${esc(d.nombre.split(" ")[0])}!</h2>
         <p class="sub">${mobile ? "Se ha abierto WhatsApp con tu pedido." : "Se ha abierto WhatsApp Web en otra pestaña con tu pedido."} Solo tienes que pulsar <b>enviar</b> y te confirmamos enseguida.</p>
       </div>
-      ${d.pago === "Bizum" ? `
-      <div class="bizum">
-        <p class="eyebrow">Paga ahora por Bizum</p>
-        <div class="bizum__row"><span>Importe</span><b>${eur(subtotal() + envio())}</b></div>
-        <div class="bizum__row"><span>Al móvil</span><b>${bizumNum.replace(/(\d{3})(?=\d)/g, "$1 ")}</b><button class="bizum__copy" data-copy="${bizumNum}">Copiar</button></div>
-        <div class="bizum__row"><span>Concepto</span><b>Pedido ${num}</b><button class="bizum__copy" data-copy="Pedido ${num}">Copiar</button></div>
-        <p class="bizum__note">Empezamos a prepararlo en cuanto nos llegue el Bizum.</p>
-      </div>` : ""}
       <a class="track-cta" href="${trackUrl}">
         <span><b>Sigue tu pedido en directo</b><small>Recibido · En cocina · ${dom ? "En reparto" : "Listo para recoger"}</small></span>
         <span aria-hidden="true">→</span>
@@ -391,7 +413,6 @@
     };
     saved.catch(err => { console.error(err); const e = $("#save-err"); if (e) e.hidden = false; });
     $("#copiar").onclick = e => copy(msg, e.currentTarget);
-    document.querySelectorAll(".bizum__copy").forEach(b => b.onclick = () => copy(b.dataset.copy, b));
     $("#nuevo").onclick = () => { state.cart = []; renderCartbar(); refreshBadges(); closeSheet(); };
   }
 

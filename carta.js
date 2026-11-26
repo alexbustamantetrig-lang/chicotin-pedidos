@@ -9,8 +9,6 @@ window.CONFIG = {
   // Número de WhatsApp que recibe los pedidos, con prefijo y sin espacios (ej. "34600123456").
   // Vacío = modo demo: WhatsApp se abre y eliges tú a quién mandarlo (pruébalo contigo mismo).
   whatsapp: "34616209237",
-  // Móvil donde el restaurante recibe los Bizum. Vacío = el mismo número de WhatsApp.
-  bizum: "",
   telefono: "984 18 29 32",
   direccion: "Avenida Eysines 24, bajo · Piedras Blancas",
   pedidoMinimoDomicilio: 12,
@@ -54,7 +52,8 @@ window.CARTA = [
       { n: "Picante", d: "Vacuno, cheddar, bacon, cebolla cruda, lechuga y jalapeños", p: 10.5, extras: "burger", tag: "Pica" },
       { n: "Queso de Cabra", d: "Vacuno, queso de cabra, bacon y mermelada de tomate", p: 11.5, extras: "burger" },
       { n: "Chicotín", d: "Vacuno, bacon, cheddar, pepinillo, lechuga, cebolla caramelizada y tomate", p: 10.5, extras: "burger", tag: "La de la casa" },
-      { n: "Chicotín Animal", d: "La Chicotín, pero doble", p: 13.5, extras: "burger", tag: "Doble" },
+      { n: "Chicotín Animal", d: "La Chicotín, pero doble", p: 13.5, extras: "burger", tag: "Doble",
+        quitar: ["bacon", "queso cheddar", "pepinillo", "lechuga", "cebolla caramelizada", "tomate"] },
       { n: "Vegana", d: "Casera de garbanzos, tomate, calabacín, cebolla, lechuga y queso vegano", p: 10.5, extras: "burger", tag: "Vegana" },
       { n: "Vacuno", d: "Solo carne de vacuno", p: 9.5, extras: "burger" },
     ],
@@ -143,6 +142,13 @@ window.CARTA = [
     ],
   },
 ];
+
+// Salsas que se ofrecen al final del pedido (en la carta: "salsa extra 0,30 €").
+// CONFIRMAR con el restaurante cuáles tienen.
+window.SALSAS_EXTRA = {
+  precio: 0.3,
+  lista: ["Ketchup", "Mayonesa", "Alioli", "Barbacoa", "Salsa Chicotín"],
+};
 
 window.EXTRAS = {
   burger: [["Queso", 1], ["Bacon", 1], ["Huevo frito", 1.5], ["Cebolla caramelizada", 0.8]],

@@ -82,7 +82,7 @@
         <div class="chips">
           <span class="chip ${o.modo === "domicilio" ? "chip--dom" : "chip--rec"}">${o.modo === "domicilio" ? "Domicilio" : "Recoger"}</span>
           <span class="chip">${esc(o.hora)}</span>
-          <span class="chip ${o.pago === "Bizum" ? "chip--bizum" : ""}">${o.pago === "Bizum" ? "Bizum · comprobar" : esc(o.pago)}</span>
+          <span class="chip">${esc(o.pago)}</span>
           ${o.encargo ? `<span class="chip chip--enc">Encargo ${esc(o.encargo.split("-").reverse().join("/"))}</span>` : ""}
         </div>
         <ul class="items">${(o.items || []).map(i => `<li><b>${i.qty}×</b> ${esc(i.n)}${i.d ? `<small>${esc(i.d)}</small>` : ""}</li>`).join("")}</ul>
