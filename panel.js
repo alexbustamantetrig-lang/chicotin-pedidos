@@ -192,6 +192,7 @@
           <form class="rider-add" data-bar="add-rider"><input name="r" placeholder="Nuevo repartidor" maxlength="30" aria-label="Nombre del nuevo repartidor"><button class="rider" type="submit">+ Añadir</button></form>
         </div>` : ""}
         ${n}<span class="actionbar__sp"></span>
+        <button class="abtn" data-bar="cancel">Cancelar</button>
         <button class="abtn" data-bar="to-actuales">↩ Devolver</button>
         ${dom.length ? `<button class="abtn abtn--red" data-bar="to-reparto" ${state.rider ? "" : "disabled"}>${state.rider ? `Mandar con ${esc(state.rider)} →` : "Elige repartidor"}${rec.length ? ` (+${rec.length} a recoger)` : ""}</button>`
           : `<button class="abtn abtn--green" data-bar="to-listo">Listo para recoger →</button>`}`;
@@ -208,7 +209,16 @@
     if (b.dataset.bar === "to-cocina") update(ids, { status: "cocina" });
     if (b.dataset.bar === "to-actuales") update(ids, { status: "nuevo", repartidor: null });
     if (b.dataset.bar === "to-listo") update(ids, { status: "listo" });
-    if (b.dataset.bar === "cancel" && confirm(`¿Cancelar ${ids.length === 1 ? "este pedido" : `estos ${ids.length} pedidos`}?`)) update(ids, { status: "cancelado" });
+    // Confirmación con doble toque (los avisos del navegador están bloqueados en algunas tablets).
+    if (b.dataset.bar === "cancel") {
+      if (b.dataset.armed) { update(ids, { status: "cancelado" }); flash(`${ids.length === 1 ? "Pedido cancelado" : `${ids.length} pedidos cancelados`}`); }
+      else {
+        b.dataset.armed = "1"; b.classList.add("abtn--red");
+        b.textContent = `¿Seguro? Toca otra vez para cancelar ${ids.length === 1 ? "el pedido" : `los ${ids.length}`}`;
+        setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.classList.remove("abtn--red"); b.textContent = "Cancelar"; } }, 4000);
+      }
+      return;
+    }
     if (b.dataset.bar === "to-reparto" && state.rider) {
       const rec = sel.filter(o => o.modo === "recoger").map(o => o.id);
       const dom = sel.filter(o => o.modo === "domicilio").map(o => o.id);
