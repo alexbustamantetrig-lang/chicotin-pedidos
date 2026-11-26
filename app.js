@@ -350,7 +350,6 @@
   // Si se corta la conexión y el cliente reintenta, se reutiliza el mismo id: la base de datos
   // reconoce el pedido repetido y no lo duplica. Solo cambia de id si cambia el pedido.
   let pending = null;
-  const newNum = () => String(Math.floor(1000 + Math.random() * 9000));
 
   async function send(d) {
     if (send.busy) return;          // doble toque en "Confirmar"
@@ -378,7 +377,7 @@
       return;
     }
     const sig = JSON.stringify(body);
-    if (!pending || pending.sig !== sig) pending = { sig, id: newId(), num: newNum() };
+    if (!pending || pending.sig !== sig) pending = { sig, id: newId() };
     const fallo = html => {
       if (btn) { btn.disabled = false; btn.textContent = "Reintentar pedido"; }
       let e = $("#send-err");
@@ -390,21 +389,26 @@
       try {
         let t;
         await Promise.race([
-          DB.createOrder({ id: pending.id, num: pending.num, ...body }),
+          DB.createOrder({ id: pending.id, num: "0", ...body }),   // el número del día lo pone la base de datos
           new Promise((_, rej) => { t = setTimeout(() => rej(new Error("tiempo de espera")), 10000); }),
         ]).finally(() => clearTimeout(t));
         break;
       } catch (err) {
         // No se ha guardado: NO decimos que está confirmado.
         console.error(err);
-        if (err.code === "NUM_REPETIDO" && intento < 3) { pending.num = newNum(); continue; }
         if (err.code === "LIMITE_PEDIDOS") return showFull($("#cf"));
         if (err.code === "DEMASIADOS_PEDIDOS") return fallo(`Ya tienes pedidos esperando a entrar en cocina. Espera unos minutos o ${llama}.`);
         if (err.code === "DATOS_NO_VALIDOS") return fallo(`Revisa tus datos (teléfono, nombre, dirección) e inténtalo de nuevo, o ${llama}.`);
         return fallo(`No hemos podido enviar el pedido. Revisa tu conexión y vuelve a intentarlo, o ${llama}.`);
       }
     }
-    const { id, num } = pending;
+    const { id } = pending;
+    // Número de pedido del día que ha puesto la base de datos (1, 2, 3…).
+    let num = "";
+    for (let i = 0; i < 3 && !num; i++) {
+      try { num = (await DB.getTracking(id))?.num || ""; } catch (e) { console.error(e); }
+      if (!num) await new Promise(r => setTimeout(r, 600));
+    }
     pending = null;
     const trackUrl = `seguimiento.html?id=${id}`;
 
@@ -413,7 +417,7 @@
     openSheet(`
       <div class="done">
         <div class="done__icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
-        <p class="eyebrow">Pedido nº ${num}</p>
+        <p class="eyebrow">${num ? `Pedido nº ${num}` : "Pedido recibido"}</p>
         <h2 style="margin-right:0">¡Pedido confirmado!</h2>
         <p class="sub">Muchas gracias, ${first}. Ya está en marcha y ${dom ? "te lo llevamos" : "lo tendrás listo para recoger"} <b>lo antes posible</b>.</p>
       </div>
@@ -432,7 +436,7 @@
     `);
     state.cart = []; renderCartbar(); refreshBadges();
     const og = $("#ongoing");
-    og.href = trackUrl; og.innerHTML = `<i></i> Tienes un pedido en curso (#${num}) <b>Ver estado →</b>`; og.hidden = false;
+    og.href = trackUrl; og.innerHTML = `<i></i> Tienes un pedido en curso${num ? ` (#${num})` : ""} <b>Ver estado →</b>`; og.hidden = false;
     $("#nuevo").onclick = closeSheet;
   }
 
@@ -506,7 +510,7 @@
     if (u && Date.now() - u.at < 6 * 3600e3) {
       const el = $("#ongoing");
       el.href = `seguimiento.html?id=${encodeURIComponent(u.id)}`;
-      el.innerHTML = `<i></i> Tienes un pedido en curso (#${esc(u.num)}) <b>Ver estado →</b>`;
+      el.innerHTML = `<i></i> Tienes un pedido en curso${u.num ? ` (#${esc(u.num)})` : ""} <b>Ver estado →</b>`;
       el.hidden = false;
     }
   } catch {}

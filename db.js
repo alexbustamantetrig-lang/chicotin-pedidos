@@ -29,7 +29,7 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
   // Igual que llenar_cocina() de la base de datos: rellena la cocina con la cola, por orden de llegada.
   const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
   function llenarCocina(list) {
-    const cap = Math.max(1, +(window.CONFIG && window.CONFIG.capacidadCocina) || 4);
+    const cap = Math.max(1, +(window.CONFIG && window.CONFIG.capacidadCocina) || 10);
     let hueco = cap - list.filter(o => o.status === "cocina").length;
     const now = new Date().toISOString();
     list.filter(o => o.status === "nuevo" && (!o.encargo || o.encargo <= hoy()))
@@ -43,10 +43,12 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
     async createOrder(o) {
       const all = read();
       if (all.some(x => x.id === o.id)) return;                                   // reintento del mismo pedido
-      if (all.some(x => x.num === o.num && Date.now() - new Date(x.created_at) < 864e5)) throw fail("NUM_REPETIDO", "Número repetido");
       if (!o.encargo && cuentaEspera(all) >= LIMITE_LOCAL) throw fail("LIMITE_PEDIDOS", "Demasiados pedidos en espera");
       const now = new Date().toISOString();
-      write(llenarCocina([...all, { ...o, status: "nuevo", created_at: now, updated_at: now }]));
+      // Número del día: 1, 2, 3… (como en la base de datos).
+      const dia = d => { const x = new Date(d); return x.getFullYear() + "-" + x.getMonth() + "-" + x.getDate(); };
+      const num = String(1 + Math.max(0, ...all.filter(x => dia(x.created_at) === dia(now) && /^\d{1,9}$/.test(x.num)).map(x => +x.num)));
+      write(llenarCocina([...all, { ...o, num, status: "nuevo", created_at: now, updated_at: now }]));
     },
     async getTracking(id) {
       const o = read().find(x => x.id === id);

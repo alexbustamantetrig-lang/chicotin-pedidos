@@ -5,7 +5,7 @@
   const hm = iso => new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
   const dayKey = d => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
   const byOld = (a, b) => a.created_at > b.created_at ? 1 : -1;
-  const capacidad = () => Math.max(1, +window.CONFIG.capacidadCocina || 4);
+  const capacidad = () => Math.max(1, +window.CONFIG.capacidadCocina || 10);
   const hoyISO = () => dayKey(new Date());
 
   // Mensaje para avisar al cliente por WhatsApp (se abre ya escrito; solo hay que darle a enviar).

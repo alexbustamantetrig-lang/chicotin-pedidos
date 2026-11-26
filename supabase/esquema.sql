@@ -227,7 +227,7 @@ begin
   new.origen := case when ip <> '' then md5('chicotin:' || ip) end;
   new.revisar := null; new.total_carta := null;
 
-  if new.num !~ '^[0-9]{4}$' or length(tel) < 9 then raise exception 'DATOS_NO_VALIDOS' using errcode = 'P0001'; end if;
+  if length(tel) < 9 then raise exception 'DATOS_NO_VALIDOS' using errcode = 'P0001'; end if;
   -- Cada línea: un objeto con cantidad entera 1-50 y un total numérico (la web siempre lo manda así).
   if exists (select 1 from jsonb_array_elements(new.items) x
              where jsonb_typeof(x) <> 'object' or coalesce(x->>'qty', '') !~ '^[0-9]{1,2}$'
@@ -235,9 +235,10 @@ begin
                 or char_length(coalesce(x->>'n', '')) not between 1 and 80 or char_length(coalesce(x->>'d', '')) > 300) then
     raise exception 'DATOS_NO_VALIDOS' using errcode = 'P0001';
   end if;
-  if exists (select 1 from pedidos where num = new.num and created_at > now() - interval '24 hours') then
-    raise exception 'NUM_REPETIDO' using errcode = 'P0001';
-  end if;
+  -- Número de pedido del día: 1, 2, 3… y vuelve a empezar cada día (hora de España).
+  -- Lo pone la base de datos; la web lo lee después con seguimiento().
+  new.num := (select coalesce(max(num::int), 0) + 1 from pedidos
+              where (created_at at time zone 'Europe/Madrid')::date = ahora::date and num ~ '^[0-9]{1,9}$')::text;
 
   -- Anti-spam: por conexión y por teléfono.
   if new.origen is not null and (
@@ -303,7 +304,7 @@ for each row execute function public.comprobar_limite();
 
 -- ─────────────────────────────────────────────────────────────
 --  Cola automática de cocina.
---  En cocina caben CONFIG.capacidadCocina pedidos a la vez (carta.js, por defecto 4).
+--  En cocina caben CONFIG.capacidadCocina pedidos a la vez (carta.js, por defecto 10).
 --  Los pedidos nuevos esperan en cola y entran solos en cocina, por orden de llegada,
 --  cada vez que hay hueco (al mandar uno a reparto, marcarlo listo o cancelarlo).
 --  Los encargos entran en la cola el día del encargo.
@@ -314,7 +315,7 @@ begin return t::date; exception when others then return null; end $$;
 
 create or replace function public.capacidad_cocina() returns int
 language sql stable security definer set search_path = public as $$
-  select greatest(1, coalesce((select (valor->'config'->>'capacidadCocina')::int from ajustes where clave = 'carta'), 4))
+  select greatest(1, coalesce((select (valor->'config'->>'capacidadCocina')::int from ajustes where clave = 'carta'), 10))
 $$;
 revoke all on function public.capacidad_cocina() from public;
 

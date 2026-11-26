@@ -16,7 +16,7 @@ window.CONFIG = {
   direccion: "Avenida Eysines 24, bajo · Piedras Blancas",
   pedidoMinimoDomicilio: 12,
   // Pedidos que la cocina prepara a la vez. El resto espera en cola y entra solo cuando hay hueco.
-  capacidadCocina: 4,
+  capacidadCocina: 10,
   gastosEnvio: 0,            // € por pedido a domicilio (0 = gratis)
   // Horario: 0 = domingo … 6 = sábado. Cada tramo ["HH:MM","HH:MM"].
   horario: {
