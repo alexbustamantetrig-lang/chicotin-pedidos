@@ -162,12 +162,13 @@ em { font-style: italic; color: var(--red); }
 .scrim { position: fixed; inset: 0; z-index: 40; background: rgba(28,27,24,.45); backdrop-filter: blur(2px); opacity: 0; transition: opacity .3s; }
 .scrim.is-on { opacity: 1; }
 .sheet {
-  position: fixed; left: 50%; bottom: 0; z-index: 41; width: min(620px, 100%); max-height: 92dvh;
-  transform: translate(-50%, 100%); transition: transform .45s var(--ease);
+  /* Centrado sin translate: en iPhone, un transform en el contenedor descoloca el cursor de los campos. */
+  position: fixed; left: 0; right: 0; margin: 0 auto; bottom: 0; z-index: 41; width: min(620px, 100%); max-height: 92dvh;
+  transform: translateY(100%); transition: transform .45s var(--ease);
   background: var(--bg); border-radius: 24px 24px 0 0; display: flex; flex-direction: column;
   box-shadow: 0 -20px 60px -20px rgba(0,0,0,.35);
 }
-.sheet.is-on { transform: translate(-50%, 0); }
+.sheet.is-on { transform: none; }
 .sheet__grip { width: 40px; height: 4px; border-radius: 4px; background: var(--line); margin: 10px auto 0; flex: none; }
 .sheet__x { position: absolute; top: 14px; right: 14px; width: 36px; height: 36px; border-radius: 50%; background: var(--paper); border: 1px solid var(--line); font-size: 14px; z-index: 2; }
 .sheet__body { overflow-y: auto; padding: 18px 22px calc(22px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
@@ -225,6 +226,14 @@ em { font-style: italic; color: var(--red); }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 .preview { text-align: left; white-space: pre-wrap; font: 13px/1.5 ui-monospace, Consolas, monospace; background: #E7F6DC; border-radius: 12px 12px 12px 2px; padding: 12px 14px; margin: 16px 0; max-height: 220px; overflow: auto; }
 
+.pay-hint { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.bizum { background: var(--paper); border: 2px solid #05C3DD; border-radius: 16px; padding: 16px; margin: 8px 0 4px; text-align: left; }
+.bizum .eyebrow { color: #0496A9; font-weight: 700; }
+.bizum__row { display: grid; grid-template-columns: 84px 1fr auto; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.bizum__row span { color: var(--muted); font-size: 14px; }
+.bizum__row b { font-size: 18px; }
+.bizum__copy { font-size: 13px; font-weight: 600; padding: 6px 10px; border-radius: 8px; background: #E6F9FB; color: #0496A9; }
+.bizum__note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .send-alt { display: grid; gap: 8px; }
 .send-alt .btn { width: 100%; text-decoration: none; }
 .send-alt .btn--ghost { color: var(--ink); }

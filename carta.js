@@ -9,6 +9,8 @@ window.CONFIG = {
   // Número de WhatsApp que recibe los pedidos, con prefijo y sin espacios (ej. "34600123456").
   // Vacío = modo demo: WhatsApp se abre y eliges tú a quién mandarlo (pruébalo contigo mismo).
   whatsapp: "34616209237",
+  // Móvil donde el restaurante recibe los Bizum. Vacío = el mismo número de WhatsApp.
+  bizum: "",
   telefono: "984 18 29 32",
   direccion: "Avenida Eysines 24, bajo · Piedras Blancas",
   pedidoMinimoDomicilio: 12,

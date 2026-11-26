@@ -263,7 +263,8 @@
         <div class="field"><label>Pago</label>
           <div class="pay">
             ${[["Efectivo", "💶"], ["Tarjeta", "💳"], ["Bizum", "📱"]].map(([v, ic], i) => `<label class="opt"><input type="radio" name="pago" value="${v}" ${(f.pago || "Efectivo") === v ? "checked" : ""}><span>${ic}</span>${v}</label>`).join("")}
-          </div></div>
+          </div>
+          <p class="pay-hint" id="pay-hint"></p></div>
         <div class="field"><label for="f-notas">Notas o alergias <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><textarea id="f-notas" name="notas" placeholder="Sin cebolla, timbre roto, alergia al gluten…"></textarea></div>
         <div class="sum"><div class="tot"><span>Total</span><span>${eur(subtotal() + envio())}</span></div></div>
         <button class="btn btn--wa" type="submit">
@@ -274,6 +275,14 @@
       </form>
     `);
     const form = $("#cf");
+    const HINTS = {
+      Efectivo: dom ? "Pagas al repartidor. Si necesitas cambio, dínoslo en las notas." : "Pagas al recoger en el local.",
+      Tarjeta: dom ? "El repartidor lleva datáfono." : "Pagas con tarjeta al recoger.",
+      Bizum: `Al enviar el pedido te mostramos el número y el importe para hacer el Bizum. Lo preparamos en cuanto llegue.`,
+    };
+    const hint = () => { $("#pay-hint").textContent = HINTS[form.pago.value]; };
+    form.addEventListener("change", e => { if (e.target.name === "pago") hint(); });
+    hint();
     form.addEventListener("submit", e => {
       e.preventDefault();
       let ok = true;
@@ -305,7 +314,7 @@
     L.push("");
     if (dom && C.gastosEnvio) L.push(`Envío: ${eur(C.gastosEnvio)}`);
     L.push(`*TOTAL: ${eur(subtotal() + envio())}*`);
-    L.push(`*Pago:* ${d.pago}`);
+    L.push(d.pago === "Bizum" ? `*Pago:* Bizum (concepto "Pedido ${num}"). Preparar al recibirlo.` : `*Pago:* ${d.pago}${dom ? " al repartidor" : " al recoger"}`);
     L.push("");
     L.push(`*Cliente:* ${d.nombre} · ${d.telefono}`);
     if (dom) L.push(`*Dirección:* ${d.direccion}`);
@@ -317,6 +326,7 @@
     const num = String(Math.floor(1000 + Math.random() * 9000));
     const msg = buildMessage(d, num);
     const text = encodeURIComponent(msg), phone = C.whatsapp || "";
+    const bizumNum = (C.bizum || phone).replace(/^34/, "");
     // Móvil: wa.me abre la app directamente.
     // Ordenador: wa.me se queda en una página intermedia, así que vamos directos a WhatsApp Web
     // y ofrecemos también la app de escritorio y copiar el texto.
@@ -336,6 +346,14 @@
         <h2 style="margin-right:0">¡Listo, ${esc(d.nombre.split(" ")[0])}!</h2>
         <p class="sub">${mobile ? "Se ha abierto WhatsApp con tu pedido." : "Se ha abierto WhatsApp Web en otra pestaña con tu pedido."} Solo tienes que pulsar <b>enviar</b> y te confirmamos enseguida.</p>
       </div>
+      ${d.pago === "Bizum" ? `
+      <div class="bizum">
+        <p class="eyebrow">Paga ahora por Bizum</p>
+        <div class="bizum__row"><span>Importe</span><b>${eur(subtotal() + envio())}</b></div>
+        <div class="bizum__row"><span>Al móvil</span><b>${bizumNum.replace(/(\d{3})(?=\d)/g, "$1 ")}</b><button class="bizum__copy" data-copy="${bizumNum}">Copiar</button></div>
+        <div class="bizum__row"><span>Concepto</span><b>Pedido ${num}</b><button class="bizum__copy" data-copy="Pedido ${num}">Copiar</button></div>
+        <p class="bizum__note">Empezamos a prepararlo en cuanto nos llegue el Bizum.</p>
+      </div>` : ""}
       <div class="preview">${esc(msg)}</div>
       <div class="send-alt">
         ${mobile
@@ -347,10 +365,12 @@
         <button class="btn btn--ghost" id="nuevo">Hacer otro pedido</button>
       </div>
     `);
-    $("#copiar").onclick = async e => {
-      try { await navigator.clipboard.writeText(msg); } catch { const t = document.createElement("textarea"); t.value = msg; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
-      e.currentTarget.textContent = "✓ Copiado";
+    const copy = async (text, btn) => {
+      try { await navigator.clipboard.writeText(text); } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+      btn.textContent = "✓ Copiado";
     };
+    $("#copiar").onclick = e => copy(msg, e.currentTarget);
+    document.querySelectorAll(".bizum__copy").forEach(b => b.onclick = () => copy(b.dataset.copy, b));
     $("#nuevo").onclick = () => { state.cart = []; renderCartbar(); refreshBadges(); closeSheet(); };
   }
 
