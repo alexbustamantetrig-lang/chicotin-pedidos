@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tu pedido · Chicotín</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#FAFAF6">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 90 90'%3E%3Ccircle cx='45' cy='45' r='40' fill='%23C0392B' stroke='%23111' stroke-width='4'/%3E%3Ctext x='47' y='65' text-anchor='middle' font-family='Georgia' font-size='54' font-weight='900' fill='%23111'%3EC%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { padding-bottom: 40px; }
+    .trk { max-width: 520px; margin: 0 auto; padding: 28px 20px; }
+    .trk h1 { font: 500 clamp(40px, 11vw, 56px)/1 var(--serif); margin: 4px 0 6px; }
+    .trk h1 em { display: inline-block; animation: pop .5s var(--ease); }
+    .trk .lead { color: var(--muted); margin: 0 0 28px; }
+    .orb { position: relative; width: 120px; height: 120px; margin: 4px 0 24px; }
+    .orb__core { position: absolute; inset: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #D9503F, var(--red) 60%, #8E2A1F); display: grid; place-items: center; font-size: 38px; box-shadow: 0 20px 30px -16px rgba(192,57,43,.8); transition: background .4s; }
+    .orb__ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--red); opacity: .35; animation: ring 2.4s ease-out infinite; }
+    .orb__ring:nth-child(2) { animation-delay: 1.2s; }
+    @keyframes ring { from { transform: scale(.7); opacity: .5; } to { transform: scale(1.15); opacity: 0; } }
+    .orb.is-done .orb__core { background: radial-gradient(circle at 35% 30%, #4CAF77, var(--green) 60%, #1E5A37); }
+    .orb.is-done .orb__ring { display: none; }
+
+    .steps { list-style: none; margin: 0 0 28px; padding: 0; position: relative; }
+    .steps::before { content: ""; position: absolute; left: 15px; top: 16px; bottom: 16px; width: 2px; background: var(--line); }
+    .steps .fill { position: absolute; left: 15px; top: 16px; width: 2px; background: var(--red); transition: height .8s var(--ease); }
+    .step { position: relative; display: flex; align-items: center; gap: 16px; padding: 10px 0; color: var(--muted); }
+    .step__dot { position: relative; z-index: 1; width: 32px; height: 32px; border-radius: 50%; background: var(--bg); border: 2px solid var(--line); display: grid; place-items: center; font-size: 14px; transition: all .4s var(--ease); flex: none; }
+    .step.is-past { color: var(--ink); }
+    .step.is-past .step__dot { background: var(--red); border-color: var(--red); color: #fff; }
+    .step.is-now { color: var(--ink); font-weight: 600; }
+    .step.is-now .step__dot { border-color: var(--red); background: #fff; box-shadow: 0 0 0 6px var(--red-soft); }
+    .step.is-now .step__dot::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--red); animation: pulse 2s infinite; }
+    .step small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+
+    .card { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin-bottom: 14px; }
+    .card h2 { font: 600 13px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+    .row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 15px; }
+    .row span:last-child { text-align: right; }
+    .row.tot { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; font: 600 22px var(--serif); }
+    .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+    .live i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+    .actions { display: grid; gap: 8px; margin-top: 18px; }
+    .actions .btn { text-decoration: none; color: inherit; }
+    .actions .btn--red { color: #fff; }
+    .skeleton { height: 300px; border-radius: 18px; background: linear-gradient(90deg, #F1EFE8, #F7F5EF, #F1EFE8); background-size: 200% 100%; animation: sk 1.2s infinite linear; }
+    @keyframes sk { to { background-position: -200% 0; } }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a class="top__brand" href="./" aria-label="Volver a la carta">
+      <svg class="mark" viewBox="0 0 110 90" aria-hidden="true">
+        <circle cx="8" cy="45" r="7" fill="#C0392B" stroke="#111" stroke-width="2.5"/>
+        <circle cx="102" cy="45" r="7" fill="#C0392B" stroke="#111" stroke-width="2.5"/>
+        <circle cx="55" cy="45" r="40" fill="#C0392B" stroke="#111" stroke-width="4"/>
+        <text x="57" y="65" text-anchor="middle" font-family="Georgia, serif" font-size="54" font-weight="900" fill="#111">C</text>
+      </svg>
+      <span>hicotín</span>
+    </a>
+    <span class="live" id="live"><i></i> En directo</span>
+  </header>
+
+  <main class="trk" id="trk"><div class="skeleton"></div></main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="carta.js"></script>
+  <script src="db.js"></script>
+  <script>
+  (() => {
+    const id = new URLSearchParams(location.search).get("id");
+    const root = document.getElementById("trk");
+    const eur = n => Number(n).toFixed(2).replace(".", ",") + " €";
+    const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const hm = iso => new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    const ICON = { nuevo: "🧾", cocina: "🍳", reparto: "🛵", listo: "🥡", entregado: "✓", cancelado: "✕" };
+    const LEAD = {
+      nuevo: "Hemos recibido tu pedido. En un momento entra en cocina.",
+      cocina: "Lo estamos preparando ahora mismo.",
+      reparto: "Tu pedido va de camino. ¡Ten el timbre a mano!",
+      listo: "Ya puedes pasar a recogerlo por el local.",
+      entregado: "¡Que aproveche! Gracias por pedir en Chicotín.",
+      cancelado: "Este pedido se ha cancelado. Si tienes dudas, llámanos.",
+    };
+    let last = null;
+
+    function render(o) {
+      const key = JSON.stringify([o.status, o.updated_at]);
+      if (key === last) return; last = key;
+      const steps = ESTADOS[o.modo] || ESTADOS.domicilio;
+      const idx = steps.findIndex(s => s[0] === o.status);
+      const label = o.status === "cancelado" ? "Cancelado" : steps[idx]?.[1] || o.status;
+      const done = o.status === "entregado";
+      document.title = `${label} · Pedido #${o.num} · Chicotín`;
+      root.innerHTML = `
+        <p class="eyebrow">Pedido #${esc(o.num)} · ${o.modo === "domicilio" ? "A domicilio" : "Recoger en local"}</p>
+        <div class="orb ${done || o.status === "cancelado" ? "is-done" : ""}"><span class="orb__ring"></span><span class="orb__ring"></span><span class="orb__core">${ICON[o.status] || "🧾"}</span></div>
+        <h1><em>${esc(label)}</em></h1>
+        <p class="lead">${LEAD[o.status] || ""}</p>
+        ${o.status === "cancelado" ? "" : `
+        <ol class="steps"><span class="fill" style="height:${Math.max(0, idx) / (steps.length - 1) * 100}%"></span>
+          ${steps.map(([k, t], i) => `<li class="step ${i < idx || (done && i === idx) ? "is-past" : i === idx ? "is-now" : ""}">
+            <span class="step__dot">${i < idx || (done && i === idx) ? "✓" : ""}</span>
+            <span>${t}${i === 0 ? `<small>${hm(o.created_at)}</small>` : i === idx && i > 0 ? `<small>desde las ${hm(o.updated_at)}</small>` : ""}</span>
+          </li>`).join("")}
+        </ol>`}
+        <section class="card">
+          <h2>${o.modo === "domicilio" ? "Entrega" : "Recogida"}</h2>
+          <div class="row"><span>Hora</span><span>${esc(o.hora)}</span></div>
+        </section>
+        <section class="card">
+          <h2>Tu pedido</h2>
+          ${(o.items || []).map(it => `<div class="row"><span>${it.qty}× ${esc(it.n)}${it.d ? `<br><small style="color:var(--muted)">${esc(it.d)}</small>` : ""}</span><span>${eur(it.total)}</span></div>`).join("")}
+          <div class="row tot"><span>Total</span><span>${eur(o.total)}</span></div>
+        </section>
+        <div class="actions">
+          <a class="btn btn--ghost" href="tel:+34${CONFIG.telefono.replace(/\D/g, "")}">¿Algún problema? Llámanos · ${CONFIG.telefono}</a>
+          <a class="btn btn--red" href="./">Volver a la carta</a>
+        </div>`;
+      if (done || o.status === "cancelado") document.getElementById("live").style.visibility = "hidden";
+    }
+
+    function notFound(msg) {
+      root.innerHTML = `<h1>${msg}</h1><p class="lead">Revisa el enlace que te llegó al hacer el pedido o llámanos al ${CONFIG.telefono}.</p>
+        <div class="actions"><a class="btn btn--red" href="./">Volver a la carta</a></div>`;
+      document.getElementById("live").style.visibility = "hidden";
+    }
+
+    async function load() {
+      if (!id) return notFound("No encontramos el pedido");
+      try {
+        const o = await DB.getTracking(id);
+        o ? render(o) : notFound("No encontramos el pedido");
+        return o;
+      } catch (e) { console.error(e); }
+    }
+
+    load().then(o => {
+      if (!o) return;
+      setInterval(() => { if (!document.hidden) load(); }, 8000);
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+      if (DB.mode === "local") addEventListener("storage", load);
+    });
+  })();
+  </script>
+</body>
+</html>

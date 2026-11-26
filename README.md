@@ -25,6 +25,22 @@ Para la demo con el dueño, pon tu móvil (`"34600123456"`) y verás cómo llega
    - El diseñador pone un botón "Pedir online" que enlace a `https://pedidos.chicotin.com`.
    - Añade el enlace en el perfil de Google (enlace de pedido) y en la bio de Instagram.
 
+## Panel de cocina y seguimiento
+- `panel.html`: tablero para la tablet del restaurante (Nuevos → En cocina → Reparto/Recoger → Entregados),
+  con aviso sonoro de pedido nuevo y botón 💬 para avisar al cliente por WhatsApp con un toque.
+- `seguimiento.html?id=…`: el cliente ve en directo en qué paso va su pedido. El enlace sale en el WhatsApp
+  del pedido y en la pantalla final.
+- `db.js`: sin Supabase funciona en **modo demo** (los pedidos solo se ven en el mismo navegador).
+
+### Conectar Supabase (para que el panel reciba pedidos de cualquier móvil)
+1. Crea un proyecto gratis en supabase.com (región Europa).
+2. *SQL Editor* → pega `supabase/esquema.sql` → *Run*.
+3. *Authentication → Sign In / Providers*: desactiva "Allow new users to sign up".
+4. *Authentication → Users → Add user*: correo y contraseña del restaurante. Luego ejecuta en el SQL Editor
+   la línea `insert into public.personal ...` del final del esquema con ese correo.
+5. *Project Settings → API*: copia la **Project URL** y la **anon public key** en `db.js`.
+   (Nunca la `service_role`.) Sube los cambios a GitHub.
+
 ## Siguiente fase (cuando haga falta)
 - Menú del día leído de un Google Sheets que ellos editan desde el móvil.
-- Panel de pedidos en una tablet en lugar de WhatsApp, con límite de pedidos por franja y pago online.
+- Avisos automáticos por la API de WhatsApp Business, límite de pedidos por franja y pago online.

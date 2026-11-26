@@ -299,7 +299,7 @@
     });
   }
 
-  function buildMessage(d, num) {
+  function buildMessage(d, num, trackUrl) {
     const dom = state.mode === "domicilio";
     const L = [];
     L.push(`*NUEVO PEDIDO #${num} · ${C.nombre}*`);
@@ -319,12 +319,27 @@
     L.push(`*Cliente:* ${d.nombre} · ${d.telefono}`);
     if (dom) L.push(`*Dirección:* ${d.direccion}`);
     if (d.notas && d.notas.trim()) L.push(`*Notas:* ${d.notas.trim()}`);
+    L.push("");
+    L.push(`*Seguimiento del pedido:* ${trackUrl}`);
     return L.join("\n");
   }
 
   function send(d) {
     const num = String(Math.floor(1000 + Math.random() * 9000));
-    const msg = buildMessage(d, num);
+    const id = newId();
+    const trackUrl = new URL(`seguimiento.html?id=${id}`, location.href).href;
+    const msg = buildMessage(d, num, trackUrl);
+    const dom = state.mode === "domicilio";
+    // El pedido se guarda para el panel de cocina (en segundo plano, para no bloquear WhatsApp).
+    const saved = DB.createOrder({
+      id, num, modo: state.mode,
+      hora: d.hora,
+      encargo: d.encargo || null,
+      nombre: d.nombre.trim(), telefono: d.telefono.trim(), direccion: dom ? d.direccion.trim() : null,
+      items: state.cart.map(l => ({ qty: l.qty, n: l.n, d: l.d, total: +(l.unit * l.qty).toFixed(2) })),
+      total: +(subtotal() + envio()).toFixed(2), pago: d.pago, notas: (d.notas || "").trim() || null,
+    });
+    localStorage.setItem("chicotin-ultimo", JSON.stringify({ id, num, at: Date.now() }));
     const text = encodeURIComponent(msg), phone = C.whatsapp || "";
     const bizumNum = (C.bizum || phone).replace(/^34/, "");
     // Móvil: wa.me abre la app directamente.
@@ -354,6 +369,11 @@
         <div class="bizum__row"><span>Concepto</span><b>Pedido ${num}</b><button class="bizum__copy" data-copy="Pedido ${num}">Copiar</button></div>
         <p class="bizum__note">Empezamos a prepararlo en cuanto nos llegue el Bizum.</p>
       </div>` : ""}
+      <a class="track-cta" href="${trackUrl}">
+        <span><b>Sigue tu pedido en directo</b><small>Recibido · En cocina · ${dom ? "En reparto" : "Listo para recoger"}</small></span>
+        <span aria-hidden="true">→</span>
+      </a>
+      <p class="warn" id="save-err" hidden>No hemos podido registrar el pedido en el sistema. Envíalo por WhatsApp igualmente y te lo confirmamos.</p>
       <div class="preview">${esc(msg)}</div>
       <div class="send-alt">
         ${mobile
@@ -369,6 +389,7 @@
       try { await navigator.clipboard.writeText(text); } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
       btn.textContent = "✓ Copiado";
     };
+    saved.catch(err => { console.error(err); const e = $("#save-err"); if (e) e.hidden = false; });
     $("#copiar").onclick = e => copy(msg, e.currentTarget);
     document.querySelectorAll(".bizum__copy").forEach(b => b.onclick = () => copy(b.dataset.copy, b));
     $("#nuevo").onclick = () => { state.cart = []; renderCartbar(); refreshBadges(); closeSheet(); };
@@ -437,6 +458,17 @@
     }), { rootMargin: "-130px 0px -65% 0px" });
     ["menu-dia", ...CARTA.map(c => "cat-" + c.id)].forEach(id => spy.observe(document.getElementById(id)));
   }
+
+  // Aviso de "pedido en curso" si el cliente vuelve a la página.
+  try {
+    const u = JSON.parse(localStorage.getItem("chicotin-ultimo") || "null");
+    if (u && Date.now() - u.at < 6 * 3600e3) {
+      const el = $("#ongoing");
+      el.href = `seguimiento.html?id=${encodeURIComponent(u.id)}`;
+      el.innerHTML = `<i></i> Tienes un pedido en curso (#${esc(u.num)}) <b>Ver estado →</b>`;
+      el.hidden = false;
+    }
+  } catch {}
 
   renderStatus(); setInterval(renderStatus, 60000);
   renderMdd(); renderCarta(); observe();
