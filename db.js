@@ -17,15 +17,24 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
   // Máximo de pedidos sin pasar a cocina. El de verdad está en la base de datos
   // (función limite_pedidos() en supabase/esquema.sql); este solo vale para el modo demo.
   const LIMITE_LOCAL = 10;
-  const limitError = () => Object.assign(new Error("Demasiados pedidos en espera"), { code: "LIMITE" });
+  const fail = (code, msg) => Object.assign(new Error(msg), { code });
   const PUBLIC = ["num", "status", "modo", "hora", "items", "total", "created_at", "updated_at"];
+  // Pedidos que aún no han terminado: el panel los enseña aunque sean de hace días (encargos, olvidados).
+  const ACTIVOS = ["nuevo", "cocina", "reparto", "listo"];
+  // Mismo criterio que en_espera_ahora() de la base de datos: sin encargos y de las últimas 3 horas.
+  window.cuentaEspera = list => list.filter(o => o.status === "nuevo" && !o.encargo && Date.now() - new Date(o.created_at) < 3 * 3600e3).length;
+  // Traduce los errores que lanza la base de datos (supabase/esquema.sql) a códigos que entiende la web.
+  const CODES = ["LIMITE_PEDIDOS", "DEMASIADOS_PEDIDOS", "NUM_REPETIDO", "DATOS_NO_VALIDOS"];
 
   const local = {
     mode: "local",
     async createOrder(o) {
-      if (read().filter(x => x.status === "nuevo").length >= LIMITE_LOCAL) throw limitError();
+      const all = read();
+      if (all.some(x => x.id === o.id)) return;                                   // reintento del mismo pedido
+      if (all.some(x => x.num === o.num && Date.now() - new Date(x.created_at) < 864e5)) throw fail("NUM_REPETIDO", "Número repetido");
+      if (!o.encargo && cuentaEspera(all) >= LIMITE_LOCAL) throw fail("LIMITE_PEDIDOS", "Demasiados pedidos en espera");
       const now = new Date().toISOString();
-      write([...read(), { ...o, status: "nuevo", created_at: now, updated_at: now }]);
+      write([...all, { ...o, status: "nuevo", created_at: now, updated_at: now }]);
     },
     async getTracking(id) {
       const o = read().find(x => x.id === id);
@@ -33,15 +42,17 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
     },
     async listOrders(hours = 18) {
       const since = Date.now() - hours * 3600e3;
-      return read().filter(o => new Date(o.created_at) > since).sort((a, b) => a.created_at < b.created_at ? 1 : -1);
+      return read().filter(o => new Date(o.created_at) > since || ACTIVOS.includes(o.status)).sort((a, b) => a.created_at < b.created_at ? 1 : -1);
     },
+    async getSetting(k) { return JSON.parse(localStorage.getItem("chicotin-ajuste-" + k) || "null"); },
+    async setSetting(k, v) { localStorage.setItem("chicotin-ajuste-" + k, JSON.stringify(v)); },
     // patch: { status, repartidor, ... } aplicado a varios pedidos a la vez
     async updateOrders(ids, patch) {
       const now = new Date().toISOString();
       write(read().map(o => ids.includes(o.id) ? { ...o, ...patch, updated_at: now } : o));
     },
     async seed(list) { write([...read(), ...list]); },
-    async waiting() { return { en_espera: read().filter(x => x.status === "nuevo").length, limite: LIMITE_LOCAL }; },
+    async waiting() { return { en_espera: cuentaEspera(read()), limite: LIMITE_LOCAL }; },
     subscribe(cb) { addEventListener("storage", e => { if (e.key === LS) cb(); }); },
     async session() { return { local: true }; },
     async signIn() { return {}; },
@@ -54,7 +65,11 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
       mode: "supabase",
       async createOrder(o) {
         const { error } = await sb.from("pedidos").insert(o);
-        if (error) throw /LIMITE_PEDIDOS/.test(error.message) ? limitError() : error;
+        if (!error) return;
+        if (error.code === "23505" && /pedidos_pkey/.test(error.message)) return;   // ya se guardó en el intento anterior
+        if (error.code === "23514") throw fail("DATOS_NO_VALIDOS", error.message);   // algún campo demasiado largo
+        const code = CODES.find(c => (error.message || "").includes(c));
+        throw code ? fail(code, error.message) : error;
       },
       async waiting() {
         const { data, error } = await sb.rpc("pedidos_en_espera");
@@ -68,9 +83,25 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
       },
       async listOrders(hours = 18) {
         const since = new Date(Date.now() - hours * 3600e3).toISOString();
-        const { data, error } = await sb.from("pedidos").select("*").gte("created_at", since).order("created_at", { ascending: false });
+        // Supabase devuelve como mucho 1000 filas por consulta: la caja de 30 días se pide por páginas.
+        const out = new Map(), PAGE = 1000;   // Map por id: si entra un pedido entre páginas, no se cuenta dos veces
+        for (let from = 0; ; from += PAGE) {
+          const { data, error } = await sb.from("pedidos").select("*")
+            .or(`created_at.gte."${since}",status.in.(${ACTIVOS.join(",")})`)
+            .order("created_at", { ascending: false }).order("id").range(from, from + PAGE - 1);
+          if (error) throw error;
+          data.forEach(o => out.set(o.id, o));
+          if (data.length < PAGE) return [...out.values()];
+        }
+      },
+      async getSetting(k) {
+        const { data, error } = await sb.from("ajustes").select("valor").eq("clave", k).maybeSingle();
         if (error) throw error;
-        return data;
+        return data ? data.valor : null;
+      },
+      async setSetting(k, v) {
+        const { error } = await sb.from("ajustes").upsert({ clave: k, valor: v, updated_at: new Date().toISOString() });
+        if (error) throw error;
       },
       async updateOrders(ids, patch) {
         const { error } = await sb.from("pedidos").update(patch).in("id", ids);

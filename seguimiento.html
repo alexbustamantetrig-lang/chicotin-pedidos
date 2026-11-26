@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=202611261634">
+  <link rel="stylesheet" href="styles.css?v=202611262000">
   <style>
     body { padding-bottom: 40px; }
     .trk { max-width: 520px; margin: 0 auto; padding: 28px 20px; }
@@ -68,8 +68,8 @@
   <main class="trk" id="trk"><div class="skeleton"></div></main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="carta.js?v=202611261634"></script>
-  <script src="db.js?v=202611261634"></script>
+  <script src="carta.js?v=202611262000"></script>
+  <script src="db.js?v=202611262000"></script>
   <script>
   (() => {
     const id = new URLSearchParams(location.search).get("id");
@@ -114,7 +114,7 @@
         </section>
         <section class="card">
           <h2>Tu pedido</h2>
-          ${(o.items || []).map(it => `<div class="row"><span>${it.qty}× ${esc(it.n)}${it.d ? `<br><small style="color:var(--muted)">${esc(it.d)}</small>` : ""}</span><span>${eur(it.total)}</span></div>`).join("")}
+          ${(o.items || []).map(it => `<div class="row"><span>${esc(it.qty)}× ${esc(it.n)}${it.d ? `<br><small style="color:var(--muted)">${esc(it.d)}</small>` : ""}</span><span>${eur(it.total)}</span></div>`).join("")}
           <div class="row tot"><span>Total</span><span>${eur(o.total)}</span></div>
         </section>
         <div class="actions">
@@ -136,7 +136,12 @@
         const o = await DB.getTracking(id);
         o ? render(o) : notFound("No encontramos el pedido");
         return o;
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+        // Fallo de red: se reintenta solo; si nunca se llegó a cargar, se avisa en vez de dejar la pantalla vacía.
+        if (!last) root.innerHTML = `<h1>Sin conexión</h1><p class="lead">No podemos cargar el pedido ahora mismo. Lo seguimos intentando…</p>`;
+        return "reintentar";
+      }
     }
 
     load().then(o => {

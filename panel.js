@@ -36,6 +36,7 @@
     $("#login").hidden = true; $("#view").hidden = $("#tabs").hidden = false;
     $("#logout").hidden = DB.mode === "local";
     try { state.limite = (await DB.waiting()).limite; } catch {}
+    syncCarta(); loadRiders();
     await load();
     DB.subscribe(() => load());
     setInterval(load, 30000);
@@ -50,14 +51,43 @@
   });
   $("#logout").onclick = async () => { await DB.signOut(); location.reload(); };
 
+  // La base de datos compara cada pedido con esta copia de carta.js (precios, horario, mínimo).
+  // Se sube al abrir el panel: después de cambiar la carta, recarga el panel una vez.
+  const canon = v => JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a < b ? -1 : 1)) : x);
+  async function syncCarta() {
+    const C = window.CONFIG, M = window.MENU_DIA;
+    const carta = {
+      carta: window.CARTA, extras: window.EXTRAS || {}, salsas: window.SALSAS_EXTRA || { precio: 0, lista: [] },
+      mdd: { precioSemana: M.precioSemana, precioFinde: M.precioFinde },
+      config: { horario: C.horario, modoPruebas: !!C.modoPruebas, gastosEnvio: C.gastosEnvio || 0, pedidoMinimoDomicilio: C.pedidoMinimoDomicilio || 0 },
+    };
+    try {
+      if (canon(await DB.getSetting("carta")) !== canon(carta)) await DB.setSetting("carta", carta);
+    } catch (e) { console.error(e); flash("No se pudo subir la carta a la base de datos. Revisa la conexión y recarga."); }
+  }
+  // Repartidores compartidos entre tablets (antes solo vivían en este navegador).
+  async function loadRiders() {
+    try {
+      const remote = (await DB.getSetting("repartidores")) || [];
+      const all = [...new Set([...remote, ...state.riders])];
+      state.riders = all;
+      localStorage.setItem("chicotin-repartidores", JSON.stringify(all));
+      if (all.length !== remote.length) await DB.setSetting("repartidores", all);
+      renderActionbar();
+    } catch (e) { console.error(e); }
+  }
+
   /* ── Datos ──────────────────────────────── */
   async function load() {
     try { state.orders = await DB.listOrders(18); }
     catch (e) { console.error(e); return; }
-    if (state.tab === "caja") state.month = null;   // se recalcula al pintar
     const fresh = known ? state.orders.filter(o => !known.has(o.id) && o.status === "nuevo") : [];
     known = new Set(state.orders.map(o => o.id));
-    render(new Set(fresh.map(o => o.id)));
+    // En Caja solo se recalcula si algo ha cambiado de verdad (antes parpadeaba cada 30 s).
+    const sig = state.orders.map(o => o.id + o.status + o.updated_at).join();
+    const changed = sig !== state.sig; state.sig = sig;
+    if (state.tab === "caja" && !changed) renderCounts();
+    else { if (state.tab === "caja") state.month = null; render(new Set(fresh.map(o => o.id))); }
     if (fresh.length) alertNew(fresh);
   }
 
@@ -73,11 +103,14 @@
   const list = st => state.orders.filter(o => st.includes(o.status)).sort(byOld);
 
   /* ── Pintar ─────────────────────────────── */
-  function render(newIds = new Set()) {
+  function renderCounts() {
     const counts = { actuales: list(["nuevo"]).length, cocina: list(["cocina"]).length, reparto: list(["reparto", "listo"]).length };
     document.querySelectorAll("[data-count]").forEach(b => b.textContent = counts[b.dataset.count] || "");
     document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
     document.title = (counts.actuales ? `(${counts.actuales}) ` : "") + "Panel de pedidos · Chicotín";
+  }
+  function render(newIds = new Set()) {
+    renderCounts();
 
     // La selección solo vale para pedidos que siguen en la pestaña actual.
     const visible = new Set((state.tab === "actuales" ? list(["nuevo"]) : state.tab === "cocina" ? list(["cocina"]) : []).map(o => o.id));
@@ -88,7 +121,7 @@
     if (state.tab === "actuales") v.innerHTML = viewActuales(newIds);
     if (state.tab === "cocina") v.innerHTML = viewCocina();
     if (state.tab === "reparto") v.innerHTML = viewReparto();
-    if (state.tab === "caja") { v.innerHTML = `<div class="empty"><b>Calculando…</b></div>`; renderCaja(); }
+    if (state.tab === "caja") { if (!v.querySelector(".tiles")) v.innerHTML = `<div class="empty"><b>Calculando…</b></div>`; renderCaja(); }
     v.scrollTop = y;
     renderAges();
     renderActionbar();
@@ -101,14 +134,15 @@
     return `
       <article class="order ${isNew ? "is-new" : ""} ${state.sel.has(o.id) ? "is-sel" : ""}" data-id="${o.id}" ${selectable ? 'data-sel="1"' : ""}>
         ${selectable ? `<span class="check" aria-hidden="true">✓</span>` : ""}
-        <div class="order__top"><span class="order__num">#${esc(o.num)}</span><span class="age" data-at="${o.created_at}" data-status="${o.status}"></span></div>
+        <div class="order__top"><span class="order__num">#${esc(o.num)}</span><span class="age" data-at="${o.created_at}" data-status="${o.encargo ? "encargo" : o.status}"></span></div>
         <div class="chips">
           <span class="chip ${o.modo === "domicilio" ? "chip--dom" : "chip--rec"}">${o.modo === "domicilio" ? "🛵 Domicilio" : "🥡 Recoger"}</span>
           <span class="chip">🕒 ${esc(o.hora)}</span>
           <span class="chip">${o.pago === "Tarjeta" ? "💳" : "💶"} ${esc(o.pago)}</span>
           ${o.encargo ? `<span class="chip chip--enc">Encargo ${esc(o.encargo.split("-").reverse().join("/"))}</span>` : ""}
         </div>
-        <ul class="items">${(o.items || []).map(i => `<li><b>${i.qty}×</b> ${esc(i.n)}${i.d ? `<small>${detail(i.d)}</small>` : ""}</li>`).join("")}</ul>
+        <ul class="items">${(o.items || []).map(i => `<li><b>${esc(i.qty)}×</b> ${esc(i.n)}${i.d ? `<small>${detail(i.d)}</small>` : ""}</li>`).join("")}</ul>
+        ${o.revisar ? `<div class="review">⚠️ <span><b>Revisar antes de cobrar:</b> ${esc(o.revisar)}${o.total_carta != null && Number(o.total_carta) !== Number(o.total) ? `<br>Según la carta: <b>${eur(o.total_carta)}</b>` : ""}</span></div>` : ""}
         ${o.notas ? `<div class="notes">📝 ${esc(o.notas)}</div>` : ""}
         <div class="who"><span><a href="tel:${tel}">${esc(o.nombre)} · ${esc(o.telefono)}</a>
           ${o.direccion ? `<br><a href="${maps}" target="_blank" rel="noopener">📍 ${esc(o.direccion)}</a>` : ""}</span>
@@ -124,8 +158,8 @@
 
   function viewActuales(newIds) {
     const l = list(["nuevo"]);
-    const lim = state.limite || 10, full = l.length >= lim;
-    return head("Pedidos actuales", `Toca un pedido para seleccionarlo y mándalo a cocina. <b class="cap ${full ? "is-full" : ""}">${l.length} de ${lim} en espera</b>`, l.length) +
+    const lim = state.limite || 10, n = cuentaEspera(l), full = n >= lim;
+    return head("Pedidos actuales", `Toca un pedido para seleccionarlo y mándalo a cocina. <b class="cap ${full ? "is-full" : ""}">${n} de ${lim} en espera</b>`, l.length) +
       (full ? `<div class="full-warn">⛔ <span><b>Límite alcanzado.</b> La web no acepta pedidos nuevos hasta que pases alguno a cocina.</span></div>` : "") +
       (l.length ? `<div class="grid">${l.map(o => card(o, { isNew: newIds.has(o.id), acts: `<button class="mini mini--go" data-act="one" data-to="cocina">A cocina →</button>` })).join("")}</div>`
         : `<div class="empty"><b>Sin pedidos nuevos</b>Cuando entre uno, sonará y aparecerá aquí.</div>`);
@@ -164,7 +198,7 @@
     }).join("")}</div>`;
     if (listos.length) {
       html += `<h2 class="section-t">Para recoger en el local (${listos.length})</h2>
-        <div class="grid">${listos.map(o => card(o, { selectable: false, acts: `<button class="mini mini--go" data-act="one" data-to="entregado">✓ Recogido</button>` })).join("")}</div>`;
+        <div class="grid">${listos.map(o => card(o, { selectable: false, acts: `<button class="mini" data-act="one" data-to="cocina">↩ A cocina</button><button class="mini mini--go" data-act="one" data-to="entregado">✓ Recogido</button>` })).join("")}</div>`;
     }
     return html;
   }
@@ -227,7 +261,7 @@
       const dom = sel.filter(o => o.modo === "domicilio").map(o => o.id);
       const who = state.rider;
       update(dom, { status: "reparto", repartidor: who });
-      if (rec.length) DB.updateOrders(rec, { status: "listo" }).then(load);
+      if (rec.length) DB.updateOrders(rec, { status: "listo" }).then(load, err => { console.error(err); flash("No se pudo guardar el cambio. Revisa la conexión."); load(); });
       flash(`${dom.length} ${dom.length === 1 ? "pedido sale" : "pedidos salen"} con ${who}`);
     }
   });
@@ -235,7 +269,14 @@
     e.preventDefault();
     const name = e.target.r.value.trim().replace(/\s+/g, " ").slice(0, 30);
     if (!name) return;
-    if (!state.riders.includes(name)) state.riders.push(name);
+    if (!state.riders.includes(name)) {
+      state.riders.push(name);
+      DB.getSetting("repartidores").then(r => {
+        state.riders = [...new Set([...(r || []), ...state.riders])];
+        localStorage.setItem("chicotin-repartidores", JSON.stringify(state.riders));
+        return DB.setSetting("repartidores", state.riders);
+      }).then(renderActionbar).catch(err => console.error(err));
+    }
     localStorage.setItem("chicotin-repartidores", JSON.stringify(state.riders));
     state.rider = name; renderActionbar();
   });
@@ -277,6 +318,7 @@
     const track = new URL(`seguimiento.html?id=${o.id}`, location.href).href;
     const text = `¡Hola ${o.nombre.split(" ")[0]}! Desde Chicotín: ${AVISO[o.status] || "te escribimos por tu pedido"} (pedido #${o.num}).\nPuedes seguirlo aquí: ${track}`;
     let tel = String(o.telefono).replace(/\D/g, "");
+    tel = tel.replace(/^00/, "");
     if (tel.length === 9) tel = "34" + tel;
     window.open(`https://wa.me/${tel}?text=${encodeURIComponent(text)}`, "_blank", "noopener");
   }
@@ -300,7 +342,9 @@
     const cash = os => sum(os.filter(o => o.pago !== "Tarjeta"));
     const card = os => sum(os.filter(o => o.pago === "Tarjeta"));
 
-    const tDone = done.filter(o => dayKey(o.created_at) === today);
+    // Lo entregado cuenta el día en que se entregó (un encargo se pide días antes; tras medianoche, igual).
+    const when = o => o.status === "entregado" ? o.updated_at : o.created_at;
+    const tDone = done.filter(o => dayKey(when(o)) === today);
     const tOpen = all.filter(o => o.status !== "entregado" && dayKey(o.created_at) === today);
     const riders = {};
     tDone.filter(o => o.modo === "domicilio").forEach(o => (riders[o.repartidor || "Sin asignar"] ||= []).push(o));
@@ -310,7 +354,7 @@
     const days = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - i);
-      const k = dayKey(d), os = done.filter(o => dayKey(o.created_at) === k);
+      const k = dayKey(d), os = done.filter(o => dayKey(when(o)) === k);
       days.push({ k, d, n: os.length, total: sum(os), cash: cash(os), card: card(os) });
     }
     const open = days.filter(d => d.n > 0);
@@ -321,6 +365,7 @@
     const best = open.reduce((b, d) => !b || d.total > b.total ? d : b, null);
     const fmtDay = d => d.d.toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
 
+    const y = $("#view").scrollTop;
     $("#view").innerHTML = `
       ${head("Caja", "Solo cuentan los pedidos entregados. Los cancelados no suman.", 0)}
       <div class="tiles">
@@ -352,6 +397,7 @@
         <tbody>${days.slice().reverse().filter(d => d.n || d.k === today).map(d => `<tr class="${d.k === today ? "is-today" : ""}">
           <td>${d.k === today ? "Hoy" : fmtDay(d)}</td><td>${d.n}</td><td>${eur(d.cash)}</td><td>${eur(d.card)}</td><td class="tot">${eur(d.total)}</td></tr>`).join("")}</tbody></table>
       </div>`;
+    $("#view").scrollTop = y;
     wireChart(days);
   }
 

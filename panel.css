@@ -181,3 +181,6 @@ table.days { width: 100%; border-collapse: collapse; font-size: 14px; font-varia
   .routes, .grid { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition-duration: .01ms !important; } }
+
+/* Pedido que no cuadra con la carta (lo marca la base de datos) */
+.review { display: flex; gap: 8px; margin: 8px 0; padding: 9px 11px; border-radius: 10px; background: var(--red-soft); color: #7A1F14; border: 1.5px solid var(--red); font-size: 13.5px; line-height: 1.4; }

@@ -72,7 +72,7 @@
   });
   $("#mdd-add").addEventListener("click", e => {
     const m = state.mdd;
-    addToCart({ n: "Menú del día", d: [m.primero, m.segundo, m.acomp, m.postre].join(" · "), unit: mddPrice(), qty: 1 }, e.currentTarget);
+    addToCart({ n: "Menú del día", d: [m.primero, m.segundo, m.acomp, m.postre].join(" · "), unit: mddPrice(), qty: 1, ref: { k: "mdd" } }, e.currentTarget);
     state.mdd.primero = state.mdd.segundo = null; renderMdd();
   });
 
@@ -86,7 +86,7 @@
         ${c.nota ? `<p class="cat__note">${c.nota}</p>` : ""}
         <div class="items">
           ${c.platos.map((p, i) => {
-            const id = `${c.id}-${i}`; itemById[id] = { ...p, cat: c.nombre };
+            const id = `${c.id}-${i}`; itemById[id] = { ...p, cat: c.nombre, ref: { k: "plato", cat: c.id, i } };
             const price = p.variantes ? `desde ${eur(Math.min(...p.variantes.map(v => v[1])))}` : eur(p.p);
             return `<button class="item reveal" data-id="${id}">
               <div><div class="item__n">${esc(p.n)}${p.tag ? `<span class="tag">${p.tag}</span>` : ""}${p.encargo ? `<span class="tag">Encargo</span>` : ""}</div>
@@ -101,7 +101,7 @@
   $("#carta").addEventListener("click", e => {
     const b = e.target.closest(".item"); if (!b) return;
     const p = itemById[b.dataset.id];
-    if (!p.variantes && !p.opciones && !p.extras && !ingredientes(p).length) addToCart({ n: itemName(p), d: "", unit: p.p, qty: 1, encargo: p.encargo, src: b.dataset.id }, b);
+    if (!p.variantes && !p.opciones && !p.extras && !ingredientes(p).length) addToCart({ n: itemName(p), d: "", unit: p.p, qty: 1, encargo: p.encargo, src: b.dataset.id, ref: p.ref }, b);
     else openOptions(b.dataset.id, b);
   });
   // Ingredientes que se pueden quitar: los de la descripción menos el principal (la carne, el pollo…).
@@ -173,14 +173,15 @@
     };
     const upd = () => { $("#oq").textContent = qty; $("#oadd").textContent = `Añadir · ${eur(calc() * qty)}`; };
     body.addEventListener("change", upd);
-    body.querySelectorAll("[data-q]").forEach(b => b.onclick = () => { qty = Math.max(1, qty + +b.dataset.q); upd(); });
+    body.querySelectorAll("[data-q]").forEach(b => b.onclick = () => { qty = Math.min(50, Math.max(1, qty + +b.dataset.q)); upd(); });
     $("#oadd").onclick = () => {
-      const bits = [];
-      if (p.variantes) bits.push(p.variantes[+body.querySelector("[name=var]:checked").value][0]);
+      const bits = [], ref = { ...p.ref };
+      if (p.variantes) { ref.v = +body.querySelector("[name=var]:checked").value; bits.push(p.variantes[ref.v][0]); }
       if (p.opciones) bits.push(body.querySelector("[name=op]:checked").value);
       const sin = [...body.querySelectorAll("[name=sin]:checked")].map(x => "Sin " + x.value);
-      const ex = [...body.querySelectorAll("[name=ex]:checked")].map(x => "+ " + x.value);
-      addToCart({ n: itemName(p), d: [...bits, ...sin, ...ex].join(" · "), unit: calc(), qty, encargo: p.encargo, src: id }, srcEl);
+      const exNames = [...body.querySelectorAll("[name=ex]:checked")].map(x => x.value);
+      if (exNames.length) ref.ex = exNames;
+      addToCart({ n: itemName(p), d: [...bits, ...sin, ...exNames.map(x => "+ " + x)].join(" · "), unit: calc(), qty, encargo: p.encargo, src: id, ref }, srcEl);
       closeSheet();
     };
     upd();
@@ -190,7 +191,7 @@
   function addToCart(line, fromEl) {
     line.key = line.n + "|" + line.d;
     const ex = state.cart.find(l => l.key === line.key);
-    ex ? (ex.qty += line.qty) : state.cart.push(line);
+    ex ? (ex.qty = Math.min(50, ex.qty + line.qty)) : state.cart.push(line);
     fly(fromEl);
     renderCartbar(true);
     refreshBadges();
@@ -246,7 +247,7 @@
       <div class="addrow"><button class="btn btn--ghost" id="seguir">Seguir pidiendo</button><button class="btn btn--red" id="checkout" ${min ? "disabled" : ""}>Continuar</button></div>
     `);
     $("#sheet-body").querySelectorAll("[data-i]").forEach(b => b.onclick = () => {
-      const l = state.cart[+b.dataset.i]; l.qty += +b.dataset.q;
+      const l = state.cart[+b.dataset.i]; l.qty = Math.min(50, l.qty + +b.dataset.q);
       if (l.qty <= 0) state.cart.splice(+b.dataset.i, 1);
       if (!state.cart.some(x => !x.salsa)) state.cart = [];   // sin platos, las salsas solas no tienen sentido
       renderCartbar(); refreshBadges();
@@ -254,8 +255,8 @@
     });
     $("#sheet-body").querySelectorAll("[data-salsa]").forEach(b => b.onclick = () => {
       const s = b.dataset.salsa, l = salsaLine(s);
-      if (l) { l.qty += +b.dataset.q; if (l.qty <= 0) state.cart.splice(state.cart.indexOf(l), 1); }
-      else state.cart.push({ key: `Salsa ${s}|`, n: `Salsa ${s}`, d: "", unit: SX.precio, qty: 1, salsa: true });
+      if (l) { l.qty = Math.min(50, l.qty + +b.dataset.q); if (l.qty <= 0) state.cart.splice(state.cart.indexOf(l), 1); }
+      else state.cart.push({ key: `Salsa ${s}|`, n: `Salsa ${s}`, d: "", unit: SX.precio, qty: 1, salsa: true, ref: { k: "salsa", s } });
       renderCartbar(); openCartRefresh();
     });
     $("#seguir").onclick = closeSheet;
@@ -269,24 +270,25 @@
     const open = canOrder();
     const hasEncargo = state.cart.some(l => l.encargo);
     const minDate = new Date(); minDate.setDate(minDate.getDate() + 2);
+    const minDay = `${minDate.getFullYear()}-${String(minDate.getMonth() + 1).padStart(2, "0")}-${String(minDate.getDate()).padStart(2, "0")}`;   // fecha local, no UTC
     openSheet(`
       <p class="eyebrow">Último paso</p>
       <h2>${dom ? "¿Dónde te lo llevamos?" : "¿Cuándo vienes?"}</h2>
       <p class="sub">${dom ? "Repartimos en Piedras Blancas y alrededores." : C.direccion}</p>
       <form id="cf" novalidate>
         <div class="row2">
-          <div class="field"><label for="f-nombre">Nombre</label><input id="f-nombre" name="nombre" autocomplete="given-name" value="${esc(f.nombre || "")}" required><span class="err">Dinos tu nombre</span></div>
-          <div class="field"><label for="f-tel">Teléfono</label><input id="f-tel" name="telefono" type="tel" inputmode="tel" autocomplete="tel" value="${esc(f.telefono || "")}" required pattern="[0-9 +]{9,15}"><span class="err">Teléfono no válido</span></div>
+          <div class="field"><label for="f-nombre">Nombre</label><input id="f-nombre" name="nombre" autocomplete="given-name" maxlength="80" value="${esc(f.nombre || "")}" required><span class="err">Dinos tu nombre</span></div>
+          <div class="field"><label for="f-tel">Teléfono</label><input id="f-tel" name="telefono" type="tel" inputmode="tel" autocomplete="tel" value="${esc(f.telefono || "")}" maxlength="20" required pattern="[0-9 +]{9,20}"><span class="err">Teléfono no válido</span></div>
         </div>
-        ${dom ? `<div class="field"><label for="f-dir">Dirección</label><input id="f-dir" name="direccion" autocomplete="street-address" placeholder="Calle, número, piso" value="${esc(f.direccion || "")}" required><span class="err">Necesitamos la dirección</span></div>` : ""}
+        ${dom ? `<div class="field"><label for="f-dir">Dirección</label><input id="f-dir" name="direccion" autocomplete="street-address" placeholder="Calle, número, piso" maxlength="200" value="${esc(f.direccion || "")}" required><span class="err">Necesitamos la dirección</span></div>` : ""}
         <div class="asap">⏱ <span><b>${dom ? "Te lo llevamos" : "Lo tienes listo"} lo antes posible.</b> Lo empezamos en cuanto llega y en el seguimiento ves cómo va.</span></div>
-        ${hasEncargo ? `<div class="field"><label for="f-enc">Fecha del encargo (tortilla / empanada)</label><input id="f-enc" name="encargo" type="date" min="${minDate.toISOString().slice(0, 10)}" required><span class="err">Elige un día con 2 días de antelación</span></div>` : ""}
+        ${hasEncargo ? `<div class="field"><label for="f-enc">Fecha del encargo (tortilla / empanada)</label><input id="f-enc" name="encargo" type="date" min="${minDay}" required><span class="err">Elige un día con 2 días de antelación</span></div>` : ""}
         <div class="field"><label>Pago</label>
           <div class="pay">
             ${[["Efectivo", "💶"], ["Tarjeta", "💳"]].map(([v, ic]) => `<label class="opt"><input type="radio" name="pago" value="${v}" ${(f.pago === "Tarjeta" ? "Tarjeta" : "Efectivo") === v ? "checked" : ""}><span>${ic}</span>${v}</label>`).join("")}
           </div>
           <p class="pay-hint" id="pay-hint"></p></div>
-        <div class="field"><label for="f-notas">Notas o alergias <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><textarea id="f-notas" name="notas" placeholder="Sin cebolla, timbre roto, alergia al gluten…"></textarea></div>
+        <div class="field"><label for="f-notas">Notas o alergias <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><textarea id="f-notas" name="notas" maxlength="500" placeholder="Sin cebolla, timbre roto, alergia al gluten…"></textarea></div>
         <div class="sum"><div class="tot"><span>Total</span><span>${eur(subtotal() + envio())}</span></div></div>
         ${open ? "" : `<p class="warn">Ahora mismo estamos cerrados. ${closedText()}</p>`}
         <button class="btn btn--red btn--confirm" type="submit" ${open ? "" : "disabled"}>${open ? `Confirmar pedido · ${eur(subtotal() + envio())}` : "Cerrado ahora"}</button>
@@ -307,7 +309,10 @@
       e.preventDefault();
       let ok = true;
       form.querySelectorAll("[required]").forEach(inp => {
-        const bad = !inp.value.trim() || (inp.pattern && !new RegExp(`^${inp.pattern}$`).test(inp.value.trim()));
+        const v = inp.value.trim();
+        const bad = !v || (inp.pattern && !new RegExp(`^${inp.pattern}$`).test(v))
+          || (inp.type === "tel" && v.replace(/\D/g, "").length < 9)
+          || (inp.min && inp.type === "date" && v < inp.min);
         inp.closest(".field").classList.toggle("has-err", bad);
         if (bad && ok) { inp.focus(); ok = false; }
       });
@@ -342,34 +347,66 @@
     }, 30000);
   }
 
+  // Si se corta la conexión y el cliente reintenta, se reutiliza el mismo id: la base de datos
+  // reconoce el pedido repetido y no lo duplica. Solo cambia de id si cambia el pedido.
+  let pending = null;
+  const newNum = () => String(Math.floor(1000 + Math.random() * 9000));
+
   async function send(d) {
-    const num = String(Math.floor(1000 + Math.random() * 9000));
-    const id = newId();
-    const trackUrl = `seguimiento.html?id=${id}`;
+    if (send.busy) return;          // doble toque en "Confirmar"
+    send.busy = true;
+    try { await doSend(d); } finally { send.busy = false; }
+  }
+  async function doSend(d) {
     const dom = state.mode === "domicilio";
     const btn = $("#cf button[type=submit]");
     if (btn) { btn.disabled = true; btn.textContent = "Enviando pedido…"; }
+    state.cart.forEach(l => { if (l.ref?.k === "mdd") l.unit = mddPrice(); });   // si pasa la medianoche
     const total = +(subtotal() + envio()).toFixed(2);
-    const lines = state.cart.map(l => ({ qty: l.qty, n: l.n, d: l.d, total: +(l.unit * l.qty).toFixed(2) }));
-    try {
-      await Promise.race([
-        DB.createOrder({
-          id, num, modo: state.mode, hora: d.hora, encargo: d.encargo || null,
-          nombre: d.nombre.trim(), telefono: d.telefono.trim(), direccion: dom ? d.direccion.trim() : null,
-          items: lines, total, pago: d.pago, notas: (d.notas || "").trim() || null,
-        }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("tiempo de espera")), 10000)),
-      ]);
-    } catch (err) {
-      // No se ha guardado: NO decimos que está confirmado.
-      console.error(err);
-      if (err.code === "LIMITE") return showFull($("#cf"));
+    const lines = state.cart.map(l => ({ qty: l.qty, n: l.n, d: l.d, total: +(l.unit * l.qty).toFixed(2), ref: l.ref }));
+    const body = {
+      modo: state.mode, hora: d.hora, encargo: d.encargo || null,
+      nombre: d.nombre.trim(), telefono: d.telefono.trim(), direccion: dom ? d.direccion.trim() : null,
+      items: lines, total, pago: d.pago, notas: (d.notas || "").trim() || null,
+    };
+    const llamaPre = `llámanos al <a href="tel:+34${C.telefono.replace(/\D/g, "")}">${C.telefono}</a>`;
+    if (lines.length > 60 || total >= 1000 || lines.some(l => l.qty > 50)) {
+      if (btn) { btn.disabled = false; btn.textContent = `Confirmar pedido · ${eur(total)}`; }
+      let e = $("#send-err");
+      if (!e) { e = document.createElement("p"); e.id = "send-err"; e.className = "warn"; btn?.before(e); }
+      e.innerHTML = `Es un pedido muy grande para hacerlo por la web: ${llamaPre} y te lo preparamos.`;
+      return;
+    }
+    const sig = JSON.stringify(body);
+    if (!pending || pending.sig !== sig) pending = { sig, id: newId(), num: newNum() };
+    const fallo = html => {
       if (btn) { btn.disabled = false; btn.textContent = "Reintentar pedido"; }
       let e = $("#send-err");
       if (!e) { e = document.createElement("p"); e.id = "send-err"; e.className = "warn"; btn?.before(e); }
-      e.innerHTML = `No hemos podido enviar el pedido. Revisa tu conexión y vuelve a intentarlo, o llámanos al <a href="tel:+34${C.telefono.replace(/\D/g, "")}">${C.telefono}</a>.`;
-      return;
+      e.innerHTML = html;
+    };
+    const llama = `llámanos al <a href="tel:+34${C.telefono.replace(/\D/g, "")}">${C.telefono}</a>`;
+    for (let intento = 0; ; intento++) {
+      try {
+        let t;
+        await Promise.race([
+          DB.createOrder({ id: pending.id, num: pending.num, ...body }),
+          new Promise((_, rej) => { t = setTimeout(() => rej(new Error("tiempo de espera")), 10000); }),
+        ]).finally(() => clearTimeout(t));
+        break;
+      } catch (err) {
+        // No se ha guardado: NO decimos que está confirmado.
+        console.error(err);
+        if (err.code === "NUM_REPETIDO" && intento < 3) { pending.num = newNum(); continue; }
+        if (err.code === "LIMITE_PEDIDOS") return showFull($("#cf"));
+        if (err.code === "DEMASIADOS_PEDIDOS") return fallo(`Ya tienes pedidos esperando a entrar en cocina. Espera unos minutos o ${llama}.`);
+        if (err.code === "DATOS_NO_VALIDOS") return fallo(`Revisa tus datos (teléfono, nombre, dirección) e inténtalo de nuevo, o ${llama}.`);
+        return fallo(`No hemos podido enviar el pedido. Revisa tu conexión y vuelve a intentarlo, o ${llama}.`);
+      }
     }
+    const { id, num } = pending;
+    pending = null;
+    const trackUrl = `seguimiento.html?id=${id}`;
 
     localStorage.setItem("chicotin-ultimo", JSON.stringify({ id, num, at: Date.now() }));
     const first = esc(d.nombre.trim().split(" ")[0]);
