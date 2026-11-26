@@ -43,6 +43,11 @@ drop trigger if exists pedidos_updated_at on public.pedidos;
 create trigger pedidos_updated_at before update on public.pedidos
 for each row execute function public.tocar_updated_at();
 
+-- Permisos de tabla (los proyectos nuevos de Supabase no los dan por defecto).
+-- Lo que cada uno puede hacer DE VERDAD lo deciden las reglas RLS de abajo.
+grant insert on public.pedidos to anon, authenticated;
+grant select, update on public.pedidos to authenticated;
+
 -- Seguridad (RLS)
 alter table public.pedidos  enable row level security;
 alter table public.personal enable row level security;

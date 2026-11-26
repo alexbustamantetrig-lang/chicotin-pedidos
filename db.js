@@ -7,8 +7,8 @@
 //  La anon key de Supabase es pública por diseño: la seguridad la ponen las reglas (RLS)
 //  de supabase/esquema.sql. NUNCA pongas aquí la "service_role" key.
 // ─────────────────────────────────────────────────────────────
-window.SUPABASE_URL = "";
-window.SUPABASE_ANON_KEY = "";
+window.SUPABASE_URL = "https://jruryozgzketargyuhgk.supabase.co";
+window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   // clave "publishable" (pública)
 
 (() => {
   const LS = "chicotin-pedidos-local";
