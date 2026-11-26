@@ -15,7 +15,6 @@
 
   /* ── Horario ─────────────────────────────── */
   const toMin = hhmm => { const [h, m] = hhmm.split(":").map(Number); return h * 60 + m; };
-  const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
   const nowMin = d => d.getHours() * 60 + d.getMinutes();
 
   function isOpen(d = new Date()) {
@@ -29,23 +28,12 @@
       }
     }
   }
-  // Franjas para hoy (o el siguiente día abierto si hoy ya no quedan).
-  function slots() {
-    const d = new Date();
-    for (let i = 0; i < 8; i++) {
-      const day = new Date(d); day.setDate(d.getDate() + i);
-      const out = [];
-      const earliest = i === 0 ? nowMin(d) + C.minutosPreparacion : 0;
-      for (const [a, b] of C.horario[day.getDay()] || []) {
-        let m = Math.max(toMin(a) + 15, Math.ceil(earliest / C.intervaloFranjas) * C.intervaloFranjas);
-        for (; m <= toMin(b) - 10; m += C.intervaloFranjas) out.push(m);
-      }
-      if (out.length) {
-        const pre = i === 0 ? "Hoy" : i === 1 ? "Mañana" : DIAS[day.getDay()][0].toUpperCase() + DIAS[day.getDay()].slice(1);
-        return out.map((m, k) => ({ label: `${pre} · ${hhmm(m)}`, first: k === 0 && i === 0 }));
-      }
-    }
-    return [];
+  // Sin horas programadas: el pedido se hace con el local abierto y sale lo antes posible.
+  function closedText() {
+    const n = nextOpening();
+    if (!n) return "";
+    const cuando = n.i === 0 ? "hoy" : n.i === 1 ? "mañana" : `el ${DIAS[n.day.getDay()]}`;
+    return `Abrimos ${cuando} a las ${n.hora}; podrás pedir desde ese momento.`;
   }
 
   function renderStatus() {
@@ -276,7 +264,7 @@
   /* ── Checkout ────────────────────────────── */
   function openCheckout() {
     const f = state.form, dom = state.mode === "domicilio";
-    const sl = slots();
+    const open = isOpen();
     const hasEncargo = state.cart.some(l => l.encargo);
     const minDate = new Date(); minDate.setDate(minDate.getDate() + 2);
     openSheet(`
@@ -289,8 +277,7 @@
           <div class="field"><label for="f-tel">Teléfono</label><input id="f-tel" name="telefono" type="tel" inputmode="tel" autocomplete="tel" value="${esc(f.telefono || "")}" required pattern="[0-9 +]{9,15}"><span class="err">Teléfono no válido</span></div>
         </div>
         ${dom ? `<div class="field"><label for="f-dir">Dirección</label><input id="f-dir" name="direccion" autocomplete="street-address" placeholder="Calle, número, piso" value="${esc(f.direccion || "")}" required><span class="err">Necesitamos la dirección</span></div>` : ""}
-        <div class="field"><label for="f-hora">${dom ? "Hora de entrega" : "Hora de recogida"}</label>
-          <select id="f-hora" name="hora">${sl.map(s => `<option>${s.first ? s.label + " (lo antes posible)" : s.label}</option>`).join("") || "<option>Sin franjas disponibles</option>"}</select></div>
+        <div class="asap">⏱ <span><b>${dom ? "Te lo llevamos" : "Lo tienes listo"} lo antes posible.</b> Lo empezamos en cuanto llega y en el seguimiento ves cómo va.</span></div>
         ${hasEncargo ? `<div class="field"><label for="f-enc">Fecha del encargo (tortilla / empanada)</label><input id="f-enc" name="encargo" type="date" min="${minDate.toISOString().slice(0, 10)}" required><span class="err">Elige un día con 2 días de antelación</span></div>` : ""}
         <div class="field"><label>Pago</label>
           <div class="pay">
@@ -299,7 +286,8 @@
           <p class="pay-hint" id="pay-hint"></p></div>
         <div class="field"><label for="f-notas">Notas o alergias <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><textarea id="f-notas" name="notas" placeholder="Sin cebolla, timbre roto, alergia al gluten…"></textarea></div>
         <div class="sum"><div class="tot"><span>Total</span><span>${eur(subtotal() + envio())}</span></div></div>
-        <button class="btn btn--red btn--confirm" type="submit">Confirmar pedido · ${eur(subtotal() + envio())}</button>
+        ${open ? "" : `<p class="warn">Ahora mismo estamos cerrados. ${closedText()}</p>`}
+        <button class="btn btn--red btn--confirm" type="submit" ${open ? "" : "disabled"}>${open ? `Confirmar pedido · ${eur(subtotal() + envio())}` : "Cerrado ahora"}</button>
         <p class="legal">Tus datos solo se usan para preparar este pedido.</p>
       </form>
     `);
@@ -320,7 +308,9 @@
         if (bad && ok) { inp.focus(); ok = false; }
       });
       if (!ok) return;
+      if (!isOpen()) { openCheckout(); return; }   // por si cerró mientras rellenaba
       const data = Object.fromEntries(new FormData(form));
+      data.hora = "Lo antes posible";
       state.form = { nombre: data.nombre, telefono: data.telefono, direccion: data.direccion || state.form.direccion, pago: data.pago };
       localStorage.setItem("chicotin-form", JSON.stringify(state.form));
       send(data);
@@ -362,7 +352,7 @@
         <div class="done__icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
         <p class="eyebrow">Pedido nº ${num}</p>
         <h2 style="margin-right:0">¡Pedido confirmado!</h2>
-        <p class="sub">Muchas gracias, ${first}. Ya lo tenemos${dom ? " y te lo llevamos" : " y te avisamos cuando esté listo"} para <b>${esc(d.hora.replace(" (lo antes posible)", "").replace(/^Hoy · /, "hoy a las "))}</b>.</p>
+        <p class="sub">Muchas gracias, ${first}. Ya está en marcha y ${dom ? "te lo llevamos" : "lo tendrás listo para recoger"} <b>lo antes posible</b>.</p>
       </div>
       <a class="track-cta" href="${trackUrl}">
         <span><b>Ver el seguimiento del pedido</b><small>Recibido · En cocina · ${dom ? "En reparto" : "Listo para recoger"}</small></span>

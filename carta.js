@@ -13,8 +13,6 @@ window.CONFIG = {
   direccion: "Avenida Eysines 24, bajo · Piedras Blancas",
   pedidoMinimoDomicilio: 12,
   gastosEnvio: 0,            // € por pedido a domicilio (0 = gratis)
-  minutosPreparacion: 30,    // primera hora disponible = ahora + esto
-  intervaloFranjas: 15,      // minutos entre franjas horarias
   // Horario: 0 = domingo … 6 = sábado. Cada tramo ["HH:MM","HH:MM"].
   horario: {
     0: [["11:30", "16:00"], ["19:30", "23:00"]],
