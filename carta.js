@@ -15,6 +15,8 @@ window.CONFIG = {
   telefono: "984 18 29 32",
   direccion: "Avenida Eysines 24, bajo · Piedras Blancas",
   pedidoMinimoDomicilio: 12,
+  // Pedidos que la cocina prepara a la vez. El resto espera en cola y entra solo cuando hay hueco.
+  capacidadCocina: 4,
   gastosEnvio: 0,            // € por pedido a domicilio (0 = gratis)
   // Horario: 0 = domingo … 6 = sábado. Cada tramo ["HH:MM","HH:MM"].
   horario: {

@@ -300,3 +300,51 @@ end $$;
 drop trigger if exists pedidos_limite on public.pedidos;
 create trigger pedidos_limite before insert on public.pedidos
 for each row execute function public.comprobar_limite();
+
+-- ─────────────────────────────────────────────────────────────
+--  Cola automática de cocina.
+--  En cocina caben CONFIG.capacidadCocina pedidos a la vez (carta.js, por defecto 4).
+--  Los pedidos nuevos esperan en cola y entran solos en cocina, por orden de llegada,
+--  cada vez que hay hueco (al mandar uno a reparto, marcarlo listo o cancelarlo).
+--  Los encargos entran en la cola el día del encargo.
+-- ─────────────────────────────────────────────────────────────
+create or replace function public.fecha_segura(t text) returns date
+language plpgsql immutable as $$
+begin return t::date; exception when others then return null; end $$;
+
+create or replace function public.capacidad_cocina() returns int
+language sql stable security definer set search_path = public as $$
+  select greatest(1, coalesce((select (valor->'config'->>'capacidadCocina')::int from ajustes where clave = 'carta'), 4))
+$$;
+revoke all on function public.capacidad_cocina() from public;
+
+create or replace function public.llenar_cocina() returns void
+language plpgsql security definer set search_path = public as $$
+declare hueco int; hoy date := (now() at time zone 'Europe/Madrid')::date;
+begin
+  perform pg_advisory_xact_lock(4243);   -- dos tablets a la vez no meten pedidos de más
+  hueco := capacidad_cocina() - (select count(*) from pedidos where status = 'cocina');
+  if hueco <= 0 then return; end if;
+  update pedidos set status = 'cocina' where id in (
+    select id from pedidos
+    where status = 'nuevo' and (encargo is null or fecha_segura(encargo) <= hoy)
+    order by created_at limit hueco);
+end $$;
+revoke all on function public.llenar_cocina() from public;
+
+create or replace function public.tras_cambio_pedidos() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if pg_trigger_depth() = 1 then perform llenar_cocina(); end if;   -- no se llama a sí misma en bucle
+  return null;
+end $$;
+revoke all on function public.tras_cambio_pedidos() from public;
+
+drop trigger if exists pedidos_llenar_cocina on public.pedidos;
+create trigger pedidos_llenar_cocina after insert or update of status on public.pedidos
+for each statement execute function public.tras_cambio_pedidos();
+drop trigger if exists ajustes_llenar_cocina on public.ajustes;
+create trigger ajustes_llenar_cocina after insert or update on public.ajustes
+for each statement execute function public.tras_cambio_pedidos();
+
+select public.llenar_cocina();   -- por si ya había pedidos esperando

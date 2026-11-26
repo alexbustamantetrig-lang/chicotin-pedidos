@@ -26,6 +26,18 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
   // Traduce los errores que lanza la base de datos (supabase/esquema.sql) a códigos que entiende la web.
   const CODES = ["LIMITE_PEDIDOS", "DEMASIADOS_PEDIDOS", "NUM_REPETIDO", "DATOS_NO_VALIDOS"];
 
+  // Igual que llenar_cocina() de la base de datos: rellena la cocina con la cola, por orden de llegada.
+  const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  function llenarCocina(list) {
+    const cap = Math.max(1, +(window.CONFIG && window.CONFIG.capacidadCocina) || 4);
+    let hueco = cap - list.filter(o => o.status === "cocina").length;
+    const now = new Date().toISOString();
+    list.filter(o => o.status === "nuevo" && (!o.encargo || o.encargo <= hoy()))
+      .sort((a, b) => a.created_at > b.created_at ? 1 : -1)
+      .forEach(o => { if (hueco-- > 0) { o.status = "cocina"; o.updated_at = now; } });
+    return list;
+  }
+
   const local = {
     mode: "local",
     async createOrder(o) {
@@ -34,7 +46,7 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
       if (all.some(x => x.num === o.num && Date.now() - new Date(x.created_at) < 864e5)) throw fail("NUM_REPETIDO", "Número repetido");
       if (!o.encargo && cuentaEspera(all) >= LIMITE_LOCAL) throw fail("LIMITE_PEDIDOS", "Demasiados pedidos en espera");
       const now = new Date().toISOString();
-      write([...all, { ...o, status: "nuevo", created_at: now, updated_at: now }]);
+      write(llenarCocina([...all, { ...o, status: "nuevo", created_at: now, updated_at: now }]));
     },
     async getTracking(id) {
       const o = read().find(x => x.id === id);
@@ -49,7 +61,7 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
     // patch: { status, repartidor, ... } aplicado a varios pedidos a la vez
     async updateOrders(ids, patch) {
       const now = new Date().toISOString();
-      write(read().map(o => ids.includes(o.id) ? { ...o, ...patch, updated_at: now } : o));
+      write(llenarCocina(read().map(o => ids.includes(o.id) ? { ...o, ...patch, updated_at: now } : o)));
     },
     async seed(list) { write([...read(), ...list]); },
     async waiting() { return { en_espera: cuentaEspera(read()), limite: LIMITE_LOCAL }; },

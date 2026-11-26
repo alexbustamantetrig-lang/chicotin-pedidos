@@ -5,6 +5,8 @@
   const hm = iso => new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
   const dayKey = d => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
   const byOld = (a, b) => a.created_at > b.created_at ? 1 : -1;
+  const capacidad = () => Math.max(1, +window.CONFIG.capacidadCocina || 4);
+  const hoyISO = () => dayKey(new Date());
 
   // Mensaje para avisar al cliente por WhatsApp (se abre ya escrito; solo hay que darle a enviar).
   const AVISO = {
@@ -16,7 +18,7 @@
   };
 
   const state = {
-    orders: [], month: null, tab: "actuales", sel: new Set(), rider: null,
+    orders: [], month: null, tab: "cocina", sel: new Set(), rider: null,
     riders: JSON.parse(localStorage.getItem("chicotin-repartidores") || "[]"),
   };
   let known = null, soundOn = false, audioCtx = null;
@@ -59,7 +61,7 @@
     const carta = {
       carta: window.CARTA, extras: window.EXTRAS || {}, salsas: window.SALSAS_EXTRA || { precio: 0, lista: [] },
       mdd: { precioSemana: M.precioSemana, precioFinde: M.precioFinde },
-      config: { horario: C.horario, modoPruebas: !!C.modoPruebas, gastosEnvio: C.gastosEnvio || 0, pedidoMinimoDomicilio: C.pedidoMinimoDomicilio || 0 },
+      config: { horario: C.horario, modoPruebas: !!C.modoPruebas, gastosEnvio: C.gastosEnvio || 0, pedidoMinimoDomicilio: C.pedidoMinimoDomicilio || 0, capacidadCocina: capacidad() },
     };
     try {
       if (canon(await DB.getSetting("carta")) !== canon(carta)) await DB.setSetting("carta", carta);
@@ -81,14 +83,16 @@
   async function load() {
     try { state.orders = await DB.listOrders(18); }
     catch (e) { console.error(e); return; }
-    const fresh = known ? state.orders.filter(o => !known.has(o.id) && o.status === "nuevo") : [];
-    known = new Set(state.orders.map(o => o.id));
+    // Avisos: pedido nuevo, y pedido que entra solo en cocina desde la cola.
+    const fresh = known ? state.orders.filter(o => !known.has(o.id) && ["nuevo", "cocina"].includes(o.status)) : [];
+    const entran = known ? state.orders.filter(o => known.get(o.id) === "nuevo" && o.status === "cocina") : [];
+    known = new Map(state.orders.map(o => [o.id, o.status]));
     // En Caja solo se recalcula si algo ha cambiado de verdad (antes parpadeaba cada 30 s).
     const sig = state.orders.map(o => o.id + o.status + o.updated_at).join();
     const changed = sig !== state.sig; state.sig = sig;
     if (state.tab === "caja" && !changed) renderCounts();
-    else { if (state.tab === "caja") state.month = null; render(new Set(fresh.map(o => o.id))); }
-    if (fresh.length) alertNew(fresh);
+    else { if (state.tab === "caja") state.month = null; render(new Set([...fresh, ...entran].map(o => o.id))); }
+    if (fresh.length || entran.length) alertNew(fresh, entran);
   }
 
   async function update(ids, patch) {
@@ -134,7 +138,7 @@
     return `
       <article class="order ${isNew ? "is-new" : ""} ${state.sel.has(o.id) ? "is-sel" : ""}" data-id="${o.id}" ${selectable ? 'data-sel="1"' : ""}>
         ${selectable ? `<span class="check" aria-hidden="true">✓</span>` : ""}
-        <div class="order__top"><span class="order__num">#${esc(o.num)}</span><span class="age" data-at="${o.created_at}" data-status="${o.encargo ? "encargo" : o.status}"></span></div>
+        <div class="order__top"><span class="order__num">#${esc(o.num)}</span><span class="age" data-at="${o.created_at}" data-since="${o.updated_at}" data-status="${o.encargo ? "encargo" : o.status}"></span></div>
         <div class="chips">
           <span class="chip ${o.modo === "domicilio" ? "chip--dom" : "chip--rec"}">${o.modo === "domicilio" ? "🛵 Domicilio" : "🥡 Recoger"}</span>
           <span class="chip">🕒 ${esc(o.hora)}</span>
@@ -159,18 +163,19 @@
   function viewActuales(newIds) {
     const l = list(["nuevo"]);
     const lim = state.limite || 10, n = cuentaEspera(l), full = n >= lim;
-    return head("Pedidos actuales", `Toca un pedido para seleccionarlo y mándalo a cocina. <b class="cap ${full ? "is-full" : ""}">${n} de ${lim} en espera</b>`, l.length) +
-      (full ? `<div class="full-warn">⛔ <span><b>Límite alcanzado.</b> La web no acepta pedidos nuevos hasta que pases alguno a cocina.</span></div>` : "") +
-      (l.length ? `<div class="grid">${l.map(o => card(o, { isNew: newIds.has(o.id), acts: `<button class="mini mini--go" data-act="one" data-to="cocina">A cocina →</button>` })).join("")}</div>`
-        : `<div class="empty"><b>Sin pedidos nuevos</b>Cuando entre uno, sonará y aparecerá aquí.</div>`);
+    return head("En cola", `Entran solos en cocina por orden de llegada cuando hay hueco (${capacidad()} a la vez). Toca uno solo si quieres cancelarlo. <b class="cap ${full ? "is-full" : ""}">${n} de ${lim} en espera</b>`, l.length) +
+      (full ? `<div class="full-warn">⛔ <span><b>Cola llena.</b> La web no acepta pedidos nuevos hasta que salgan pedidos de cocina.</span></div>` : "") +
+      (l.length ? `<div class="grid">${l.map((o, i) => card(o, { isNew: newIds.has(o.id), acts: `<span class="qpos">${o.encargo && !(o.encargo <= hoyISO()) ? "Encargo para otro día" : `${i + 1}º en cola`}</span>` })).join("")}</div>`
+        : `<div class="empty"><b>Cola vacía</b>Si la cocina está llena, los pedidos nuevos esperan aquí y entran solos cuando hay hueco.</div>`);
   }
 
   function viewCocina() {
     const l = list(["cocina"]);
-    return head("En cocina", "Selecciona uno o varios, elige repartidor y mándalos a reparto.", l.length) +
+    const cap = capacidad();
+    return head("En cocina", `Selecciona uno o varios, elige repartidor y mándalos a reparto. Al salir, entra solo el siguiente de la cola. <b class="cap ${l.length >= cap ? "is-full" : ""}">${l.length} de ${cap} en cocina</b>`, l.length) +
       (l.length ? `<div class="grid">${l.map(o => card(o, {
         acts: o.modo === "recoger" ? `<button class="mini mini--go" data-act="one" data-to="listo">Listo para recoger</button>` : "",
-      })).join("")}</div>` : `<div class="empty"><b>Cocina vacía</b>Los pedidos que mandes desde "Pedidos actuales" aparecen aquí.</div>`);
+      })).join("")}</div>` : `<div class="empty"><b>Cocina vacía</b>Los pedidos nuevos entran aquí solos, con aviso sonoro.</div>`);
   }
 
   function viewReparto() {
@@ -207,7 +212,8 @@
     document.querySelectorAll(".age").forEach(el => {
       const min = Math.floor((Date.now() - new Date(el.dataset.at)) / 60000);
       el.textContent = `${hm(el.dataset.at)} · ${min < 1 ? "ahora" : `hace ${min} min`}`;
-      el.classList.toggle("is-late", (el.dataset.status === "nuevo" && min >= 5) || (el.dataset.status === "cocina" && min >= 30));
+      const enCocina = Math.floor((Date.now() - new Date(el.dataset.since || el.dataset.at)) / 60000);
+      el.classList.toggle("is-late", (el.dataset.status === "nuevo" && min >= 30) || (el.dataset.status === "cocina" && enCocina >= 30));
     });
   }
 
@@ -219,8 +225,7 @@
     const n = `<span class="actionbar__n">${sel.length} ${sel.length === 1 ? "seleccionado" : "seleccionados"}</span>`;
     if (state.tab === "actuales") {
       bar.innerHTML = `${n}<span class="actionbar__sp"></span>
-        <button class="abtn" data-bar="cancel">Cancelar</button>
-        <button class="abtn abtn--red" data-bar="to-cocina">Mandar a cocina →</button>`;
+        <button class="abtn" data-bar="cancel">Cancelar</button>`;
     } else {
       const dom = sel.filter(o => o.modo === "domicilio"), rec = sel.filter(o => o.modo === "recoger");
       bar.innerHTML = `
@@ -230,7 +235,6 @@
         </div>` : ""}
         ${n}<span class="actionbar__sp"></span>
         <button class="abtn" data-bar="cancel">Cancelar</button>
-        <button class="abtn" data-bar="to-actuales">↩ Devolver</button>
         ${dom.length ? `<button class="abtn abtn--red" data-bar="to-reparto" ${state.rider ? "" : "disabled"}>${state.rider ? `Mandar con ${esc(state.rider)} →` : "Elige repartidor"}${rec.length ? ` (+${rec.length} a recoger)` : ""}</button>`
           : `<button class="abtn abtn--green" data-bar="to-listo">Listo para recoger →</button>`}`;
     }
@@ -243,8 +247,6 @@
     const b = e.target.closest("[data-bar]"); if (!b || b.tagName === "FORM") return;
     const ids = [...state.sel];
     const sel = state.orders.filter(o => state.sel.has(o.id));
-    if (b.dataset.bar === "to-cocina") update(ids, { status: "cocina" });
-    if (b.dataset.bar === "to-actuales") update(ids, { status: "nuevo", repartidor: null });
     if (b.dataset.bar === "to-listo") update(ids, { status: "listo" });
     // Confirmación con doble toque (los avisos del navegador están bloqueados en algunas tablets).
     if (b.dataset.bar === "cancel") {
@@ -267,7 +269,7 @@
   });
   $("#actionbar").addEventListener("submit", e => {
     e.preventDefault();
-    const name = e.target.r.value.trim().replace(/\s+/g, " ").slice(0, 30);
+    const name = e.target.querySelector("input[name=r]").value.trim().replace(/\s+/g, " ").slice(0, 30);
     if (!name) return;
     if (!state.riders.includes(name)) {
       state.riders.push(name);
@@ -444,8 +446,11 @@
 
   /* ── Avisos de pedido nuevo ─────────────── */
   function flash(t) { const f = $("#flash"); f.textContent = t; f.classList.add("is-on"); clearTimeout(flash.t); flash.t = setTimeout(() => f.classList.remove("is-on"), 3500); }
-  function alertNew(l) {
-    flash(l.length === 1 ? `Nuevo pedido #${l[0].num} · ${l[0].nombre}` : `${l.length} pedidos nuevos`);
+  function alertNew(nuevos, entran = []) {
+    const enCocina = [...nuevos.filter(o => o.status === "cocina"), ...entran].sort(byOld);
+    flash(enCocina.length
+      ? `🍳 Entra${enCocina.length > 1 ? "n" : ""} en cocina: ${enCocina.map(o => "#" + o.num).join(", ")}`
+      : nuevos.length === 1 ? `Nuevo pedido en cola #${nuevos[0].num} · ${nuevos[0].nombre}` : `${nuevos.length} pedidos nuevos en cola`);
     if (soundOn) beep();
     navigator.vibrate?.([200, 100, 200]);
   }

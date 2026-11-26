@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="panel.css?v=202611262000">
+  <link rel="stylesheet" href="panel.css?v=202611262100">
 </head>
 <body>
   <header class="bar">
@@ -28,8 +28,8 @@
   </header>
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="Secciones del panel" hidden>
-    <button role="tab" data-tab="actuales" aria-selected="true"><span class="tabs__ic">🧾</span>Pedidos actuales <b class="badge" data-count="actuales"></b></button>
-    <button role="tab" data-tab="cocina" aria-selected="false"><span class="tabs__ic">🍳</span>En cocina <b class="badge" data-count="cocina"></b></button>
+    <button role="tab" data-tab="cocina" aria-selected="true"><span class="tabs__ic">🍳</span>En cocina <b class="badge" data-count="cocina"></b></button>
+    <button role="tab" data-tab="actuales" aria-selected="false"><span class="tabs__ic">🧾</span>En cola <b class="badge" data-count="actuales"></b></button>
     <button role="tab" data-tab="reparto" aria-selected="false"><span class="tabs__ic">🛵</span>En reparto <b class="badge" data-count="reparto"></b></button>
     <button role="tab" data-tab="caja" aria-selected="false"><span class="tabs__ic">💶</span>Caja</button>
   </nav>
@@ -54,8 +54,8 @@
   <div class="flash" id="flash" role="status" aria-live="assertive"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="carta.js?v=202611262000"></script>
-  <script src="db.js?v=202611262000"></script>
-  <script src="panel.js?v=202611262000"></script>
+  <script src="carta.js?v=202611262100"></script>
+  <script src="db.js?v=202611262100"></script>
+  <script src="panel.js?v=202611262100"></script>
 </body>
 </html>
