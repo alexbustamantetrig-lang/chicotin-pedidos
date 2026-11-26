@@ -37,6 +37,9 @@ a { color: inherit; }
 .view__head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .view__head h1 { font: 500 34px/1 var(--serif); margin: 0; }
 .view__head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.cap { display: inline-block; margin-left: 6px; padding: 2px 9px; border-radius: 99px; background: #EFECE3; color: var(--ink); font-size: 13px; }
+.cap.is-full { background: var(--red); color: #fff; }
+.full-warn { display: flex; gap: 10px; align-items: flex-start; background: var(--red-soft); color: #7A1F15; border: 1px solid #E8B9B2; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; font-size: 15px; }
 .selall { padding: 9px 14px; border-radius: 10px; border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
 .empty { color: var(--muted); text-align: center; padding: 60px 10px; font-size: 16px; border: 2px dashed var(--line); border-radius: 18px; }
 .empty b { display: block; font: 500 28px var(--serif); color: var(--ink); margin-bottom: 4px; }

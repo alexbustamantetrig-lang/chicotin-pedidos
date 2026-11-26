@@ -292,6 +292,8 @@
       </form>
     `);
     const form = $("#cf");
+    // ¿Cocina a tope? (máximo de pedidos sin pasar a cocina)
+    if (open) DB.waiting().then(w => { if (w.en_espera >= w.limite && form.isConnected) showFull(form); }).catch(() => {});
     const HINTS = {
       Efectivo: dom ? "Pagas al repartidor. Si necesitas cambio, dínoslo en las notas." : "Pagas al recoger en el local.",
       Tarjeta: dom ? "El repartidor lleva datáfono." : "Pagas con tarjeta al recoger.",
@@ -317,6 +319,27 @@
     });
   }
 
+  const FULL_MSG = () => `Ahora mismo tenemos la cocina a tope y no podemos coger más pedidos. Vuelve a intentarlo en unos minutos o llámanos al <a href="tel:+34${C.telefono.replace(/\D/g, "")}">${C.telefono}</a>.`;
+  function showFull(form) {
+    const btn = form.querySelector("button[type=submit]");
+    btn.disabled = true; btn.textContent = "Cocina a tope · prueba en unos minutos";
+    let e = $("#send-err");
+    if (!e) { e = document.createElement("p"); e.id = "send-err"; e.className = "warn"; btn.before(e); }
+    e.innerHTML = FULL_MSG();
+    // Se vuelve a comprobar sola cada 30 s por si la cocina se libera.
+    clearInterval(showFull.t);
+    showFull.t = setInterval(async () => {
+      if (!form.isConnected) return clearInterval(showFull.t);
+      try {
+        const w = await DB.waiting();
+        if (w.en_espera < w.limite && isOpen()) {
+          clearInterval(showFull.t); e.remove();
+          btn.disabled = false; btn.textContent = `Confirmar pedido · ${eur(subtotal() + envio())}`;
+        }
+      } catch {}
+    }, 30000);
+  }
+
   async function send(d) {
     const num = String(Math.floor(1000 + Math.random() * 9000));
     const id = newId();
@@ -338,6 +361,7 @@
     } catch (err) {
       // No se ha guardado: NO decimos que está confirmado.
       console.error(err);
+      if (err.code === "LIMITE") return showFull($("#cf"));
       if (btn) { btn.disabled = false; btn.textContent = "Reintentar pedido"; }
       let e = $("#send-err");
       if (!e) { e = document.createElement("p"); e.id = "send-err"; e.className = "warn"; btn?.before(e); }

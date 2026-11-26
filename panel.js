@@ -35,6 +35,7 @@
   async function showPanel() {
     $("#login").hidden = true; $("#view").hidden = $("#tabs").hidden = false;
     $("#logout").hidden = DB.mode === "local";
+    try { state.limite = (await DB.waiting()).limite; } catch {}
     await load();
     DB.subscribe(() => load());
     setInterval(load, 30000);
@@ -123,7 +124,9 @@
 
   function viewActuales(newIds) {
     const l = list(["nuevo"]);
-    return head("Pedidos actuales", "Toca un pedido para seleccionarlo y mándalo a cocina.", l.length) +
+    const lim = state.limite || 10, full = l.length >= lim;
+    return head("Pedidos actuales", `Toca un pedido para seleccionarlo y mándalo a cocina. <b class="cap ${full ? "is-full" : ""}">${l.length} de ${lim} en espera</b>`, l.length) +
+      (full ? `<div class="full-warn">⛔ <span><b>Límite alcanzado.</b> La web no acepta pedidos nuevos hasta que pases alguno a cocina.</span></div>` : "") +
       (l.length ? `<div class="grid">${l.map(o => card(o, { isNew: newIds.has(o.id), acts: `<button class="mini mini--go" data-act="one" data-to="cocina">A cocina →</button>` })).join("")}</div>`
         : `<div class="empty"><b>Sin pedidos nuevos</b>Cuando entre uno, sonará y aparecerá aquí.</div>`);
   }

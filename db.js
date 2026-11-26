@@ -14,11 +14,16 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
   const LS = "chicotin-pedidos-local";
   const read = () => JSON.parse(localStorage.getItem(LS) || "[]");
   const write = list => localStorage.setItem(LS, JSON.stringify(list));
+  // Máximo de pedidos sin pasar a cocina. El de verdad está en la base de datos
+  // (función limite_pedidos() en supabase/esquema.sql); este solo vale para el modo demo.
+  const LIMITE_LOCAL = 10;
+  const limitError = () => Object.assign(new Error("Demasiados pedidos en espera"), { code: "LIMITE" });
   const PUBLIC = ["num", "status", "modo", "hora", "items", "total", "created_at", "updated_at"];
 
   const local = {
     mode: "local",
     async createOrder(o) {
+      if (read().filter(x => x.status === "nuevo").length >= LIMITE_LOCAL) throw limitError();
       const now = new Date().toISOString();
       write([...read(), { ...o, status: "nuevo", created_at: now, updated_at: now }]);
     },
@@ -36,6 +41,7 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
       write(read().map(o => ids.includes(o.id) ? { ...o, ...patch, updated_at: now } : o));
     },
     async seed(list) { write([...read(), ...list]); },
+    async waiting() { return { en_espera: read().filter(x => x.status === "nuevo").length, limite: LIMITE_LOCAL }; },
     subscribe(cb) { addEventListener("storage", e => { if (e.key === LS) cb(); }); },
     async session() { return { local: true }; },
     async signIn() { return {}; },
@@ -48,7 +54,12 @@ window.SUPABASE_ANON_KEY = "sb_publishable_ZtBU8gYkZrUzDlBf_TuXJw_4NJmy4D-";   /
       mode: "supabase",
       async createOrder(o) {
         const { error } = await sb.from("pedidos").insert(o);
+        if (error) throw /LIMITE_PEDIDOS/.test(error.message) ? limitError() : error;
+      },
+      async waiting() {
+        const { data, error } = await sb.rpc("pedidos_en_espera");
         if (error) throw error;
+        return data && data[0] || { en_espera: 0, limite: 10 };
       },
       async getTracking(id) {
         const { data, error } = await sb.rpc("seguimiento", { p_id: id });

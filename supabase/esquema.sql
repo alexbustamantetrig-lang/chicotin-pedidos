@@ -88,3 +88,32 @@ exception when duplicate_object then null; end $$;
 --  insert into public.personal (user_id)
 --  select id from auth.users where email = 'cocina@ejemplo.com';
 -- ─────────────────────────────────────────────────────────────
+
+-- ─────────────────────────────────────────────────────────────
+--  Límite de pedidos sin pasar a cocina (status 'nuevo').
+--  Para cambiar el máximo, cambia el 10 de limite_pedidos() y vuelve a ejecutar esta parte.
+-- ─────────────────────────────────────────────────────────────
+create or replace function public.limite_pedidos() returns int
+language sql immutable as $$ select 10 $$;
+
+-- Cuántos hay esperando (solo el número, sin datos de nadie). Lo usa la web antes de pedir.
+create or replace function public.pedidos_en_espera() returns table (en_espera int, limite int)
+language sql stable security definer set search_path = public as $$
+  select (select count(*)::int from pedidos where status = 'nuevo'), limite_pedidos()
+$$;
+revoke all on function public.pedidos_en_espera() from public;
+grant execute on function public.pedidos_en_espera() to anon, authenticated;
+
+-- El límite lo hace cumplir la base de datos, no solo la web.
+create or replace function public.comprobar_limite() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  perform pg_advisory_xact_lock(4242);   -- dos pedidos a la vez no se saltan el límite
+  if (select count(*) from pedidos where status = 'nuevo') >= limite_pedidos() then
+    raise exception 'LIMITE_PEDIDOS' using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+drop trigger if exists pedidos_limite on public.pedidos;
+create trigger pedidos_limite before insert on public.pedidos
+for each row execute function public.comprobar_limite();
