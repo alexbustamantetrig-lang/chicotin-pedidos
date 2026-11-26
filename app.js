@@ -355,13 +355,19 @@
     return L.join("\n");
   }
 
-  function send(d) {
+  async function send(d) {
     const num = String(Math.floor(1000 + Math.random() * 9000));
     const id = newId();
     const trackUrl = new URL(`seguimiento.html?id=${id}`, location.href).href;
     const msg = buildMessage(d, num, trackUrl);
     const dom = state.mode === "domicilio";
-    // El pedido se guarda para el panel de cocina (en segundo plano, para no bloquear WhatsApp).
+    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || matchMedia("(pointer: coarse)").matches;
+    // La ventana de WhatsApp se abre YA (si se abre tras esperar, el navegador la bloquea),
+    // pero no se manda a WhatsApp hasta que el pedido esté guardado en el panel: en el móvil,
+    // al saltar a otra app el sistema puede cortar el envío a medias.
+    const win = window.open("about:blank", mobile ? "_blank" : "whatsapp");
+    const btn = $("#cf button[type=submit]");
+    if (btn) { btn.disabled = true; btn.lastChild.textContent = " Enviando pedido…"; }
     const saved = DB.createOrder({
       id, num, modo: state.mode,
       hora: d.hora,
@@ -371,18 +377,19 @@
       total: +(subtotal() + envio()).toFixed(2), pago: d.pago, notas: (d.notas || "").trim() || null,
     });
     localStorage.setItem("chicotin-ultimo", JSON.stringify({ id, num, at: Date.now() }));
+    let saveOk = true;
+    await Promise.race([saved, new Promise((_, rej) => setTimeout(() => rej(new Error("tiempo de espera")), 8000))])
+      .catch(err => { console.error(err); saveOk = false; });
     const text = encodeURIComponent(msg), phone = C.whatsapp || "";
     // Móvil: wa.me abre la app directamente.
     // Ordenador: wa.me se queda en una página intermedia, así que vamos directos a WhatsApp Web
     // y ofrecemos también la app de escritorio y copiar el texto.
-    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || matchMedia("(pointer: coarse)").matches;
     const urls = {
       movil: `https://wa.me/${phone}?text=${text}`,
       web: `https://web.whatsapp.com/send?${phone ? `phone=${phone}&` : ""}text=${text}`,
       app: `whatsapp://send?${phone ? `phone=${phone}&` : ""}text=${text}`,
     };
-    if (mobile) window.open(urls.movil, "_blank", "noopener");
-    else window.open(urls.web, "whatsapp");
+    if (win && !win.closed) { try { win.opener = null; } catch {} win.location.href = mobile ? urls.movil : urls.web; }
     const icon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Z"/></svg>`;
     openSheet(`
       <div class="done">
@@ -411,7 +418,7 @@
       try { await navigator.clipboard.writeText(text); } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
       btn.textContent = "✓ Copiado";
     };
-    saved.catch(err => { console.error(err); const e = $("#save-err"); if (e) e.hidden = false; });
+    if (!saveOk) $("#save-err").hidden = false;
     $("#copiar").onclick = e => copy(msg, e.currentTarget);
     $("#nuevo").onclick = () => { state.cart = []; renderCartbar(); refreshBadges(); closeSheet(); };
   }
