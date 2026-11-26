@@ -299,10 +299,7 @@
           <p class="pay-hint" id="pay-hint"></p></div>
         <div class="field"><label for="f-notas">Notas o alergias <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><textarea id="f-notas" name="notas" placeholder="Sin cebolla, timbre roto, alergia al gluten…"></textarea></div>
         <div class="sum"><div class="tot"><span>Total</span><span>${eur(subtotal() + envio())}</span></div></div>
-        <button class="btn btn--wa" type="submit">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.3-.5 0-1 .2-3.3-.7-2.8-1.1-4.5-3.9-4.7-4.1-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.3-.3.6-.3.8-.3h.6c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .5l-.3.5-.4.5c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.3 2.4 1.5.3.1.5.1.6-.1l.9-1.1c.2-.3.4-.2.7-.1l2 1c.3.1.5.2.5.3.1.2.1.7-.1 1.2Z"/></svg>
-          Enviar pedido por WhatsApp
-        </button>
+        <button class="btn btn--red btn--confirm" type="submit">Confirmar pedido · ${eur(subtotal() + envio())}</button>
         <p class="legal">Tus datos solo se usan para preparar este pedido.</p>
       </form>
     `);
@@ -330,97 +327,60 @@
     });
   }
 
-  function buildMessage(d, num, trackUrl) {
-    const dom = state.mode === "domicilio";
-    const L = [];
-    L.push(`*NUEVO PEDIDO #${num} · ${C.nombre}*`);
-    L.push(dom ? "*Entrega:* A domicilio" : "*Entrega:* Recoger en local");
-    L.push(`*Hora:* ${d.hora.replace(" (lo antes posible)", "")}${d.hora.includes("antes") ? " (lo antes posible)" : ""}`);
-    if (d.encargo) { const [y, m, dd] = d.encargo.split("-"); L.push(`*Encargo para el:* ${dd}/${m}/${y}`); }
-    L.push("");
-    state.cart.forEach(l => {
-      L.push(`${l.qty}x ${l.n} — ${eur(l.unit * l.qty)}`);
-      if (l.d) L.push(`   _${l.d}_`);
-    });
-    L.push("");
-    if (dom && C.gastosEnvio) L.push(`Envío: ${eur(C.gastosEnvio)}`);
-    L.push(`*TOTAL: ${eur(subtotal() + envio())}*`);
-    L.push(`*Pago:* ${d.pago}${dom ? " al repartidor" : " al recoger"}`);
-    L.push("");
-    L.push(`*Cliente:* ${d.nombre} · ${d.telefono}`);
-    if (dom) L.push(`*Dirección:* ${d.direccion}`);
-    if (d.notas && d.notas.trim()) L.push(`*Notas:* ${d.notas.trim()}`);
-    L.push("");
-    L.push(`*Seguimiento del pedido:* ${trackUrl}`);
-    return L.join("\n");
-  }
-
   async function send(d) {
     const num = String(Math.floor(1000 + Math.random() * 9000));
     const id = newId();
-    const trackUrl = new URL(`seguimiento.html?id=${id}`, location.href).href;
-    const msg = buildMessage(d, num, trackUrl);
+    const trackUrl = `seguimiento.html?id=${id}`;
     const dom = state.mode === "domicilio";
-    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || matchMedia("(pointer: coarse)").matches;
-    // La ventana de WhatsApp se abre YA (si se abre tras esperar, el navegador la bloquea),
-    // pero no se manda a WhatsApp hasta que el pedido esté guardado en el panel: en el móvil,
-    // al saltar a otra app el sistema puede cortar el envío a medias.
-    const win = window.open("about:blank", mobile ? "_blank" : "whatsapp");
     const btn = $("#cf button[type=submit]");
-    if (btn) { btn.disabled = true; btn.lastChild.textContent = " Enviando pedido…"; }
-    const saved = DB.createOrder({
-      id, num, modo: state.mode,
-      hora: d.hora,
-      encargo: d.encargo || null,
-      nombre: d.nombre.trim(), telefono: d.telefono.trim(), direccion: dom ? d.direccion.trim() : null,
-      items: state.cart.map(l => ({ qty: l.qty, n: l.n, d: l.d, total: +(l.unit * l.qty).toFixed(2) })),
-      total: +(subtotal() + envio()).toFixed(2), pago: d.pago, notas: (d.notas || "").trim() || null,
-    });
+    if (btn) { btn.disabled = true; btn.textContent = "Enviando pedido…"; }
+    const total = +(subtotal() + envio()).toFixed(2);
+    const lines = state.cart.map(l => ({ qty: l.qty, n: l.n, d: l.d, total: +(l.unit * l.qty).toFixed(2) }));
+    try {
+      await Promise.race([
+        DB.createOrder({
+          id, num, modo: state.mode, hora: d.hora, encargo: d.encargo || null,
+          nombre: d.nombre.trim(), telefono: d.telefono.trim(), direccion: dom ? d.direccion.trim() : null,
+          items: lines, total, pago: d.pago, notas: (d.notas || "").trim() || null,
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("tiempo de espera")), 10000)),
+      ]);
+    } catch (err) {
+      // No se ha guardado: NO decimos que está confirmado.
+      console.error(err);
+      if (btn) { btn.disabled = false; btn.textContent = "Reintentar pedido"; }
+      let e = $("#send-err");
+      if (!e) { e = document.createElement("p"); e.id = "send-err"; e.className = "warn"; btn?.before(e); }
+      e.innerHTML = `No hemos podido enviar el pedido. Revisa tu conexión y vuelve a intentarlo, o llámanos al <a href="tel:+34${C.telefono.replace(/\D/g, "")}">${C.telefono}</a>.`;
+      return;
+    }
+
     localStorage.setItem("chicotin-ultimo", JSON.stringify({ id, num, at: Date.now() }));
-    let saveOk = true;
-    await Promise.race([saved, new Promise((_, rej) => setTimeout(() => rej(new Error("tiempo de espera")), 8000))])
-      .catch(err => { console.error(err); saveOk = false; });
-    const text = encodeURIComponent(msg), phone = C.whatsapp || "";
-    // Móvil: wa.me abre la app directamente.
-    // Ordenador: wa.me se queda en una página intermedia, así que vamos directos a WhatsApp Web
-    // y ofrecemos también la app de escritorio y copiar el texto.
-    const urls = {
-      movil: `https://wa.me/${phone}?text=${text}`,
-      web: `https://web.whatsapp.com/send?${phone ? `phone=${phone}&` : ""}text=${text}`,
-      app: `whatsapp://send?${phone ? `phone=${phone}&` : ""}text=${text}`,
-    };
-    if (win && !win.closed) { try { win.opener = null; } catch {} win.location.href = mobile ? urls.movil : urls.web; }
-    const icon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Z"/></svg>`;
+    const first = esc(d.nombre.trim().split(" ")[0]);
     openSheet(`
       <div class="done">
         <div class="done__icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
-        <p class="eyebrow">Pedido #${num}</p>
-        <h2 style="margin-right:0">¡Listo, ${esc(d.nombre.split(" ")[0])}!</h2>
-        <p class="sub">${mobile ? "Se ha abierto WhatsApp con tu pedido." : "Se ha abierto WhatsApp Web en otra pestaña con tu pedido."} Solo tienes que pulsar <b>enviar</b> y te confirmamos enseguida.</p>
+        <p class="eyebrow">Pedido nº ${num}</p>
+        <h2 style="margin-right:0">¡Pedido confirmado!</h2>
+        <p class="sub">Muchas gracias, ${first}. Ya lo tenemos${dom ? " y te lo llevamos" : " y te avisamos cuando esté listo"} para <b>${esc(d.hora.replace(" (lo antes posible)", "").replace(/^Hoy · /, "hoy a las "))}</b>.</p>
       </div>
       <a class="track-cta" href="${trackUrl}">
-        <span><b>Sigue tu pedido en directo</b><small>Recibido · En cocina · ${dom ? "En reparto" : "Listo para recoger"}</small></span>
+        <span><b>Ver el seguimiento del pedido</b><small>Recibido · En cocina · ${dom ? "En reparto" : "Listo para recoger"}</small></span>
         <span aria-hidden="true">→</span>
       </a>
-      <p class="warn" id="save-err" hidden>No hemos podido registrar el pedido en el sistema. Envíalo por WhatsApp igualmente y te lo confirmamos.</p>
-      <div class="preview">${esc(msg)}</div>
-      <div class="send-alt">
-        ${mobile
-          ? `<a class="btn btn--wa" href="${urls.movil}">${icon} Abrir WhatsApp otra vez</a>`
-          : `<a class="btn btn--wa" href="${urls.web}" target="whatsapp">${icon} WhatsApp Web</a>
-             <a class="btn btn--ghost" href="${urls.app}">Abrir en la app de escritorio</a>`}
-        <button class="btn btn--ghost" id="copiar">Copiar el pedido</button>
-        ${phone ? `<p class="legal">¿No se abre? Copia el pedido y mándalo al ${phone.replace(/^34/, "").replace(/(\d{3})(?=\d)/g, "$1 ")} o llámanos al ${C.telefono}.</p>` : ""}
-        <button class="btn btn--ghost" id="nuevo">Hacer otro pedido</button>
+      <div class="sum confirm-sum">
+        ${lines.map(l => `<div><span>${l.qty}× ${esc(l.n)}${l.d ? `<small>${esc(l.d)}</small>` : ""}</span><span>${eur(l.total)}</span></div>`).join("")}
+        <div class="tot"><span>Total</span><span>${eur(total)}</span></div>
+        <div><span>Pago</span><span>${esc(d.pago)} ${dom ? "al repartidor" : "al recoger"}</span></div>
+        ${dom ? `<div><span>Entrega en</span><span>${esc(d.direccion)}</span></div>` : `<div><span>Recogida en</span><span>${esc(C.direccion)}</span></div>`}
       </div>
+      <p class="legal">¿Algún problema? Llámanos al <a href="tel:+34${C.telefono.replace(/\D/g, "")}">${C.telefono}</a>.</p>
+      <div class="send-alt"><button class="btn btn--ghost" id="nuevo">Hacer otro pedido</button></div>
     `);
-    const copy = async (text, btn) => {
-      try { await navigator.clipboard.writeText(text); } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
-      btn.textContent = "✓ Copiado";
-    };
-    if (!saveOk) $("#save-err").hidden = false;
-    $("#copiar").onclick = e => copy(msg, e.currentTarget);
-    $("#nuevo").onclick = () => { state.cart = []; renderCartbar(); refreshBadges(); closeSheet(); };
+    state.cart = []; renderCartbar(); refreshBadges();
+    const og = $("#ongoing");
+    og.href = trackUrl; og.innerHTML = `<i></i> Tienes un pedido en curso (#${num}) <b>Ver estado →</b>`; og.hidden = false;
+    $("#nuevo").onclick = closeSheet;
   }
 
   /* ── Modo domicilio / recoger ───────────── */
